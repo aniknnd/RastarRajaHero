@@ -41,6 +41,7 @@ export interface ProceduralTextureSet {
   buildingFacades: THREE.CanvasTexture[];
   shopSigns: THREE.CanvasTexture[];
   roadSigns: THREE.CanvasTexture[];
+  jokeSigns: THREE.Texture[];
   trafficControlSigns: THREE.CanvasTexture[];
   accidentSloganSign: THREE.CanvasTexture;
   contactShadow: THREE.CanvasTexture;
@@ -697,6 +698,16 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     return track(finalizeColorTexture(c, aniso));
   });
 
+  const jokeSigns = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16].map((number) => {
+    const url = `${import.meta.env.BASE_URL}assets/jokes/Joke_${String(number).padStart(2, '0')}.png`;
+    const tex = new THREE.TextureLoader().load(url, undefined, undefined, (error) => {
+      console.error(`Failed to load roadside joke sign: ${url}`, error);
+    });
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = aniso;
+    return tex;
+  });
+
   // 19b. Official Dhaka Road Control Signs (STOP, KEEP LEFT, SPEED 40, MRT-6)
   const trafficControlSigns = REAL_TRAFFIC_SIGNS.map((ts) => {
     const [c, ctx] = makeCanvas(320, 320);
@@ -801,11 +812,13 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     buildingFacades,
     shopSigns,
     roadSigns,
+    jokeSigns,
     trafficControlSigns,
     accidentSloganSign,
     contactShadow,
     dispose: () => {
       allTextures.forEach((t) => t.dispose());
+      jokeSigns.forEach((t) => t.dispose());
     },
   };
 }

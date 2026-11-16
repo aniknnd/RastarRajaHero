@@ -776,6 +776,7 @@ export class HeroRastarEngine {
 
   public startGame(): void {
     this.audio.unlock();
+    this.audio.resetRideAudio();
     this.audio.setMusicMode('play');
     this.gameState = GameState.PLAYING;
     this.playerX = -3.25;

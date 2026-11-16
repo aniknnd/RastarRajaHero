@@ -6,15 +6,15 @@
  */
 
 const AUDIO_PATHS = {
-  musicMenu: '/assets/aistudio/music_menu_70aa1b6a.mp3',
-  accidentAnnouncement: '/assets/aistudio/accident_sound_58477596.mp3',
-  bigCrash: '/assets/aistudio/big_crash_c8b03ff0.mp3',
-  gameOver: '/assets/aistudio/game_over_d533bd70.mp3',
-  slapReact: '/assets/aistudio/game_over-_c69626c2.mp3',
-  pedHit: '/assets/aistudio/ped_hit_7cd56047.mp3',
-  smash1: '/assets/aistudio/smash_6ba140df.mp3',
-  smash2: '/assets/aistudio/smash2_93873c2b.mp3',
-  smash3: '/assets/aistudio/smash3_f2919cb0.mp3',
+  musicMenu: `${import.meta.env.BASE_URL}assets/aistudio/music_menu_70aa1b6a.mp3`,
+  accidentAnnouncement: `${import.meta.env.BASE_URL}assets/aistudio/accident_sound_58477596.mp3`,
+  bigCrash: `${import.meta.env.BASE_URL}assets/aistudio/big_crash_c8b03ff0.mp3`,
+  gameOver: `${import.meta.env.BASE_URL}assets/aistudio/game_over_d533bd70.mp3`,
+  slapReact: `${import.meta.env.BASE_URL}assets/aistudio/game_over-_c69626c2.mp3`,
+  pedHit: `${import.meta.env.BASE_URL}assets/aistudio/ped_hit_7cd56047.mp3`,
+  smash1: `${import.meta.env.BASE_URL}assets/aistudio/smash_6ba140df.mp3`,
+  smash2: `${import.meta.env.BASE_URL}assets/aistudio/smash2_93873c2b.mp3`,
+  smash3: `${import.meta.env.BASE_URL}assets/aistudio/smash3_f2919cb0.mp3`,
 } as const;
 
 export type MusicMode = 'menu' | 'play' | 'none';
@@ -41,6 +41,7 @@ export class GameAudio {
   private lastThudTime = 0;
   private lastVoiceStartMs = 0;
   private lastAnnouncementMs = 0;
+  private announcementPlayedThisRide = false;
   private smashIndex = 0;
 
   constructor() {
@@ -356,10 +357,20 @@ export class GameAudio {
   }
 
   public playAccidentAnnouncement(): void {
+    // Announcement is a long dramatic voice line: play it ONCE per ride only,
+    // never again and again on every crash event.
+    if (this.announcementPlayedThisRide) return;
     const nowMs = performance.now();
     if (nowMs - this.lastAnnouncementMs < 9500) return;
     this.lastAnnouncementMs = nowMs;
+    this.announcementPlayedThisRide = true;
     this.playMp3Clip(AUDIO_PATHS.accidentAnnouncement, 0.92, true, true);
+  }
+
+  /** Call when a new ride starts so one-shot sounds (accident announcement) can play again. */
+  public resetRideAudio(): void {
+    this.announcementPlayedThisRide = false;
+    this.lastAnnouncementMs = 0;
   }
 
   public playBigCrash(): void {

@@ -218,6 +218,40 @@ function createFunnyRoadSign(tex: THREE.CanvasTexture, yaw = 0.28): THREE.Group 
   return g;
 }
 
+function createStreetLamp(tex: THREE.Texture, side: 1 | -1 = 1): THREE.Group {
+  const lamp = new THREE.Group();
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x4b5563, metalness: 0.65, roughness: 0.4 });
+  const bulbMat = new THREE.MeshStandardMaterial({
+    color: 0xfef3c7,
+    emissive: 0xfde68a,
+    emissiveIntensity: 0.9,
+  });
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 5.8, 6), poleMat);
+  pole.position.y = 2.9;
+  lamp.add(pole);
+
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.1, 0.1), poleMat);
+  arm.position.set(-side * 0.85, 5.75, 0);
+  lamp.add(arm);
+
+  const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.1, 0.22), bulbMat);
+  bulb.position.set(-side * 1.55, 5.66, 0);
+  lamp.add(bulb);
+
+  const signGeometry = new THREE.PlaneGeometry(3.0, 1.2);
+  const signMaterial = new THREE.MeshBasicMaterial({ map: tex });
+  const frontSign = new THREE.Mesh(signGeometry, signMaterial);
+  frontSign.position.set(-0.2, 4.55, 0.07);
+  lamp.add(frontSign);
+
+  const backSign = new THREE.Mesh(signGeometry, signMaterial);
+  backSign.position.set(-0.2, 4.55, -0.07);
+  backSign.rotation.y = Math.PI;
+  lamp.add(backSign);
+
+  return lamp;
+}
+
 function createAccidentSloganHoarding(tex: THREE.CanvasTexture, yaw = 0.25): THREE.Group {
   const g = new THREE.Group();
   const poleMat = new THREE.MeshStandardMaterial({ color: 0x374151, metalness: 0.7, roughness: 0.35 });
@@ -252,9 +286,6 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
   const medianMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.7 });
   const medianDarkMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.72 });
   const perimeterWallMat = new THREE.MeshStandardMaterial({ color: 0x0f766e, roughness: 0.75 });
-  const lampPoleMat = new THREE.MeshStandardMaterial({ color: 0x4b5563, metalness: 0.65, roughness: 0.4 });
-  const lampBulbMat = new THREE.MeshStandardMaterial({ color: 0xfef3c7, emissive: 0xfde68a, emissiveIntensity: 0.9 });
-
   const metroTrain = buildMetroTrain(textures);
   metroTrain.position.set(-1.35, 7.55, -80);
   root.add(metroTrain);
@@ -699,17 +730,16 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
       const nearPump = Math.abs(worldZ - fuelStations[0].baseZ) < 16;
 
       if (!nearCross) {
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 5.8, 6), lampPoleMat);
-        pole.position.set(GAME_CONFIG.ARTERY_HALF_WIDTH + 1.1, 2.9, pz);
-        g.add(pole);
-
-        const arm = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.1, 0.1), lampPoleMat);
-        arm.position.set(GAME_CONFIG.ARTERY_HALF_WIDTH + 0.25, 5.75, pz);
-        g.add(arm);
-
-        const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.1, 0.22), lampBulbMat);
-        bulb.position.set(GAME_CONFIG.ARTERY_HALF_WIDTH - 0.45, 5.66, pz);
-        g.add(bulb);
+        for (const side of [-1, 1] as const) {
+          const lamp = createStreetLamp(
+            textures.jokeSigns[
+              (i * 3 + Math.abs(pz / 28) + (side < 0 ? 8 : 0)) % textures.jokeSigns.length
+            ],
+            side
+          );
+          lamp.position.set(side * (GAME_CONFIG.ARTERY_HALF_WIDTH + 1.1), 0, pz);
+          g.add(lamp);
+        }
       }
 
       if (!nearCross && !nearPump && stationIdx === undefined) {
@@ -722,6 +752,41 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
           palm.position.set(GAME_CONFIG.ARTERY_HALF_WIDTH + 2.7, 0.12, 24);
           g.add(palm);
         }
+      }
+    }
+
+    // Add signed streetlights along all four downtown N-S avenues (both sides).
+    for (let avenueIdx = 0; avenueIdx < avenues.length; avenueIdx++) {
+      const avenue = avenues[avenueIdx];
+      for (const roadSide of [-1, 1] as const) {
+        const lamp = createStreetLamp(
+          textures.jokeSigns[(i * 5 + avenueIdx + 1 + (roadSide < 0 ? 8 : 0)) % textures.jokeSigns.length],
+          roadSide
+        );
+        lamp.position.set(
+          avenue.x + roadSide * (avenue.width / 2 + 1.15),
+          0,
+          -12
+        );
+        g.add(lamp);
+      }
+    }
+
+    // Light and sign the ends of each east-west boulevard and connecting alley.
+    const eastWestRoadZs = [
+      ...(intersectionZ === undefined ? [] : [intersectionZ - baseZ]),
+      ...(hasEndGoli ? [-blockLen / 2] : []),
+    ];
+    for (const roadZ of eastWestRoadZs) {
+      for (const roadSide of [-1, 1] as const) {
+        const lamp = createStreetLamp(
+          textures.jokeSigns[
+            (i * 7 + Math.round(Math.abs(roadZ)) + (roadSide > 0 ? 1 : 0)) % textures.jokeSigns.length
+          ],
+          roadSide
+        );
+        lamp.position.set(roadSide * 76.8, 0, roadZ);
+        g.add(lamp);
       }
     }
 

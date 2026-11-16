@@ -8,6 +8,7 @@ A stylized, mobile-first 3D Dhaka-inspired motorcycle arcade game branded for **
   - Seamless `720 m` (`9 × 80 m` blocks) arterial corridor running along `-Z`, flanked by **4 parallel N–S side avenues** (`±34`, `±62`), **4 major E–W boulevards**, and **5 drivable connecting side alleys (`গলি`)**.
   - Overhead **Dhaka Metro Rail (MRT Line-6)** viaduct with banners, animated MRT train, and **3 official elevated stations** (**ফার্মগেট / Farmgate**, **শাহবাগ / Shahbag**, **মতিঝিল / Motijheel**) featuring visible **diagonal 3D escalators (`চলন্ত সিঁড়ি`)** ascending from both sidewalks.
   - Highway directional gantry signs (**মহাখালী**, **গুলিস্তান**, **ফার্মগেট**, **শাহবাগ**, **মিরপুর-১০**, **উত্তরা**, **ধানমন্ডি**), Tong tea stalls, rickshaw-art arches, and humorous Bengali roadside signs across main roads and side avenues.
+  - Bengali joke boards attached to streetlights along the arterial road, all four downtown avenues, and cross-city streets.
   - Solid building AABBs (`Bld_*`) and perimeter walls with spark/thud scrapes instead of sideways bounce.
 - **Keep-Left Traffic & 24-Archetype Fleet**:
   - Left arterial lanes (`-6.75, -3.25`) move `-Z` with the player; right lanes (`+3.25, +6.75`) carry oncoming traffic `+Z`; downtown avenues and alleys also enforce Bangladesh keep-left traffic.

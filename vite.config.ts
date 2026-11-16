@@ -6,7 +6,21 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    // Serve the app under /nndbikeracing (dev + build), e.g. http://127.0.0.1:3005/nndbikeracing
+    base: '/nndbikeracing/',
     plugins: [
+      {
+        // Redirect the slash-less base URL to the trailing-slash form in dev.
+        name: 'redirect-base-no-slash',
+        configureServer(server): void {
+          server.middlewares.use((req, _res, next) => {
+            if (req.url === '/nndbikeracing') {
+              req.url = '/nndbikeracing/';
+            }
+            next();
+          });
+        },
+      },
       react(),
       tailwindcss(),
       // Copies src/assets into dist/ so root-relative URLs like
@@ -34,6 +48,8 @@ export default defineConfig(() => {
       },
     },
     server: {
+      port: 3005,
+      host: true,
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
