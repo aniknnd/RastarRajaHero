@@ -1,0 +1,8 @@
+{
+  "name": "Hero Rastar Raja",
+  "description": "Stylized Dhaka-inspired 3D motorcycle arcade game — weave through traffic, refuel petrol (তেল) at roadside stations, and rule the streets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

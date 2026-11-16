@@ -1,11 +1,56 @@
-<div align="center">
+# Hero Rastar Raja (হিরো রাস্তার রাজা)
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+A stylized, mobile-first 3D Dhaka-inspired motorcycle arcade game branded for **Nitol-Niloy Group (নিটল-নিলয় গ্রুপ)**, built with **Three.js**, **React**, **TypeScript**, and **Web Audio API**.
 
-  <h1>Built with AI Studio</h2>
+## Features
+- **Hero Motorcycle Only (0.62 Scale)**: Custom metallic fuel tank with **Hero / Nitol-Niloy** decals, twin rear shocks, disc brake & fender, swept exhaust with smoke particles, boost flame, dynamic lean/pitch, and fuel port for nozzle hose attachment.
+- **720 m Real Dhaka City Loop & Multi-Road Grid**:
+  - Seamless `720 m` (`9 × 80 m` blocks) arterial corridor running along `-Z`, flanked by **4 parallel N–S side avenues** (`±34`, `±62`), **4 major E–W boulevards**, and **5 drivable connecting side alleys (`গলি`)**.
+  - Overhead **Dhaka Metro Rail (MRT Line-6)** viaduct with banners, animated MRT train, and **3 official elevated stations** (**ফার্মগেট / Farmgate**, **শাহবাগ / Shahbag**, **মতিঝিল / Motijheel**) featuring visible **diagonal 3D escalators (`চলন্ত সিঁড়ি`)** ascending from both sidewalks.
+  - Highway directional gantry signs (**মহাখালী**, **গুলিস্তান**, **ফার্মগেট**, **শাহবাগ**, **মিরপুর-১০**, **উত্তরা**, **ধানমন্ডি**), Tong tea stalls, rickshaw-art arches, and humorous Bengali roadside signs across main roads and side avenues.
+  - Solid building AABBs (`Bld_*`) and perimeter walls with spark/thud scrapes instead of sideways bounce.
+- **Keep-Left Traffic & 24-Archetype Fleet**:
+  - Left arterial lanes (`-6.75, -3.25`) move `-Z` with the player; right lanes (`+3.25, +6.75`) carry oncoming traffic `+Z`; downtown avenues and alleys also enforce Bangladesh keep-left traffic.
+  - 24 vehicle types across Small, Medium, and Large tiers: Bicycle, Rickshaw, Van-Gari, CNG, Commuter Biker, Hatchback, Sedan, Taxi, Sport, Muscle, Pickup, Leguna, Microbus Van, DMP Police, Ambulance, RAB Van, **Nitol-Niloy Staff Bus (`নিটল-নিলয় স্টাফ বাস`)**, **Nitol Bus**, **BRTC**, **Hanif**, **Shohag**, Cargo Truck, Bangladesh Army Van, and Monster Truck.
+  - Traffic obeys RED/YELLOW signals and crosswalk pedestrians while the player breaks signals (`+200 × combo`) and smashes through smaller vehicles.
+- **Addictive Replay Loop (Pickups, Missions, Raja Fever & Ranks)**:
+  - Collectible **৳ Taka Coins**, **Petrol Jerrycans (`+18% তেল`)**, and **Nitro Surge Orbs** across main & city lanes.
+  - Cycling **Live Micro-Missions** with instant bonus payouts, **Raja Fever (`combo >= 5`)**, and progressive Dhaka rider ranks (**ঢাকার রাস্তার রাজা**).
+- **Combat, Witness Mob & Scripted Slapper**:
+  - Smash small/medium vehicles for combo points (`x1`–`x10`), explosions, and fading debris while keeping bike control.
+  - High-speed collisions with Large vehicles (buses/trucks) or getting caught by the angry witness mob trigger a scripted **Slapper** big-crash sequence before Game Over.
+- **Petrol ("তেল / জ্বালানি") & Animated Refuel Hose**:
+  - Three stations (`arterial_pump` at `-360 m`, `downtown_west_pump` at `-40 m`, and `downtown_east_pump` at `-360 m` off the city avenues).
+  - Slow below `20 km/h` on a Fuel Pad to attach an animated curved hose directly from the dispenser to the bike tank (`"ট্যাংক ফুল!"` bonus).
+  - Running empty and stopping off-station for 4 seconds ends the run (`"জ্বালানি শেষ!"`).
+- **Rule-Breaker Scoring & Bengali Quips**:
+  - Wrong-way (`+15/s`), sidewalk riding (`+10/s`), and red-light smashing (`+200 × combo`), plus `+250` district lap bonuses and humorous Bengali speed quips above `80 km/h`.
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## Controls
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+### Keyboard
+- **W / Up Arrow**: Accelerate (`চলুন`)
+- **S / Down Arrow**: Brake / Reverse (`ব্রেক / পেছনে`)
+- **A / Left Arrow / , (Comma)**: Steer Left (`বাম`)
+- **D / Right Arrow / . (Period)**: Steer Right (`ডান`)
+- **Left Shift**: Boost (`বুস্ট`)
+- **Space**: Handbrake (`হ্যান্ডব্রেক`)
+- **H**: Horn (`হর্ন`)
+- **Enter**: Start from Menu / Restart from Game Over
+- **R**: Restart after Game Over
 
-</div>
+### Touch / Mobile
+- Lower-center multi-touch cluster with **ব্রেক (BRAKE)** centered, surrounded by **^ চলুন (ACCEL)**, **বুস্ট (BOOST)**, **হর্ন (HORN)**, **< বাম (LEFT)**, **ডান > (RIGHT)**, and **v পেছনে (REV)**.
+
+## Setup & Build
+
+```bash
+npm install
+npm run dev
+```
+
+Production build:
+
+```bash
+npm run build
+```
