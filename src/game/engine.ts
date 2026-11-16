@@ -1446,8 +1446,8 @@ export class HeroRastarEngine {
 
     this.ambientHornTimer -= dt;
     if (this.ambientHornTimer <= 0) {
-      this.ambientHornTimer = 4.5 + Math.random() * 5.0;
-      if (absSpeed > 4) this.audio.playHorn(0.65 + Math.random() * 0.55);
+      this.ambientHornTimer = 9 + Math.random() * 8;
+      if (absSpeed > 4) this.audio.playHorn(0.65 + Math.random() * 0.55, true);
     }
 
     this.audio.updateEngine(speedKmh, isBoosting, true);

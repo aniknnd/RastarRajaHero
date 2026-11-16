@@ -38,11 +38,24 @@ export class GameAudio {
   private unlocked = false;
 
   private lastRefuelBeep = 0;
-  private lastThudTime = 0;
   private lastVoiceStartMs = 0;
   private lastAnnouncementMs = 0;
   private announcementPlayedThisRide = false;
   private smashIndex = 0;
+
+  // --- Sound pacing layer: keep EVERY sound available, but stop them from
+  // --- hammering over and over. Short synth "feedback" bursts stay instant;
+  // --- the long/repetitive ones get randomized cooldowns so nothing loops.
+  private sfxLastMs = new Map<string, number>();
+  private ambientHornGapMs = 9000;
+
+  private sfxGapOk(key: string, gapMs: number): boolean {
+    const nowMs = performance.now();
+    const last = this.sfxLastMs.get(key);
+    if (last !== undefined && nowMs - last < gapMs) return false;
+    this.sfxLastMs.set(key, nowMs);
+    return true;
+  }
 
   constructor() {
     if (typeof window !== 'undefined' && typeof Audio !== 'undefined') {
@@ -228,8 +241,15 @@ export class GameAudio {
     this.engineGain.gain.setTargetAtTime(gain, now, 0.06);
   }
 
-  public playHorn(pitchScale = 1): void {
+  public playHorn(pitchScale = 1, isAmbient = false): void {
     if (!this.ctx || !this.masterGain || this.muted) return;
+    if (isAmbient) {
+      // Traffic honks in the distance: keep them, but rare and varied,
+      // so the SAME honk never repeats like a loop.
+      if (!this.sfxGapOk('ambientHorn', this.ambientHornGapMs)) return;
+      this.ambientHornGapMs = 9000 + Math.random() * 9000; // next honk in 9-18s
+      pitchScale *= 0.8 + Math.random() * 0.45; // vary every honk
+    }
     try {
       const now = this.ctx.currentTime;
       const o1 = this.ctx.createOscillator();
@@ -257,6 +277,8 @@ export class GameAudio {
 
   public playDing(combo = 1): void {
     if (!this.ctx || !this.masterGain || this.muted) return;
+    // Combo dings fire in bursts — keep them chimey, not machine-gun.
+    if (!this.sfxGapOk('ding', 280)) return;
     try {
       const now = this.ctx.currentTime;
       const o = this.ctx.createOscillator();
@@ -279,6 +301,8 @@ export class GameAudio {
 
   public playWhoosh(): void {
     if (!this.ctx || !this.masterGain || this.muted) return;
+    // Near-miss swishes come in chains — a short breather keeps them special.
+    if (!this.sfxGapOk('whoosh', 600)) return;
     try {
       const now = this.ctx.currentTime;
       const bufSize = Math.floor(this.ctx.sampleRate * 0.28);
@@ -309,11 +333,15 @@ export class GameAudio {
   }
 
   public playSmash(): void {
-    // Rotate through all 3 uploaded smash clips!
-    const smashClips = [AUDIO_PATHS.smash2, AUDIO_PATHS.smash1, AUDIO_PATHS.smash3];
-    const clip = smashClips[this.smashIndex % smashClips.length];
-    this.smashIndex += 1;
-    this.playMp3Clip(clip, 0.85, clip !== AUDIO_PATHS.smash2, false);
+    // Long Bangla smash voice line: rotate through all 3 uploads, but pace it —
+    // never more than one smash voice every ~4s. The short crunch burst below
+    // still plays on EVERY hit for instant feedback.
+    if (this.sfxGapOk('smashVoice', 4000)) {
+      const smashClips = [AUDIO_PATHS.smash2, AUDIO_PATHS.smash1, AUDIO_PATHS.smash3];
+      const clip = smashClips[this.smashIndex % smashClips.length];
+      this.smashIndex += 1;
+      this.playMp3Clip(clip, 0.85, clip !== AUDIO_PATHS.smash2, false);
+    }
 
     if (!this.ctx || !this.masterGain || this.muted) return;
     try {
@@ -452,9 +480,8 @@ export class GameAudio {
 
   public playThud(): void {
     if (!this.ctx || !this.masterGain || this.muted) return;
-    const perfNow = performance.now();
-    if (perfNow - this.lastThudTime < 220) return;
-    this.lastThudTime = perfNow;
+    // Scraping a wall fires this constantly — space the booms out a bit.
+    if (!this.sfxGapOk('thud', 650)) return;
 
     try {
       const now = this.ctx.currentTime;
@@ -475,7 +502,10 @@ export class GameAudio {
   }
 
   public playPedHit(): void {
-    this.playMp3Clip(AUDIO_PATHS.pedHit, 0.88, true, false);
+    // The shocked voice line is dramatic — pace it; the synth blip below always plays.
+    if (this.sfxGapOk('pedHitVoice', 3000)) {
+      this.playMp3Clip(AUDIO_PATHS.pedHit, 0.88, true, false);
+    }
 
     if (!this.ctx || !this.masterGain || this.muted) return;
     try {
@@ -498,6 +528,7 @@ export class GameAudio {
 
   public playViolation(): void {
     if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.sfxGapOk('violation', 1500)) return;
     try {
       const now = this.ctx.currentTime;
       const o = this.ctx.createOscillator();
