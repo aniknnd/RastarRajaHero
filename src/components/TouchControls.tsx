@@ -5,7 +5,6 @@ import {
   ArrowRight,
   ArrowUp,
   Flame,
-  OctagonAlert,
   Volume2,
 } from 'lucide-react';
 import type { InputState } from '../game/types';
@@ -134,10 +133,9 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onControlChange, v
       className="pointer-events-auto fixed bottom-3 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center px-2 pb-[env(safe-area-inset-bottom,0px)]"
       style={{ maxWidth: 'calc(100vw - 16px)' }}
     >
-      {/* Single uniform grid: 3 equal columns, identical gaps everywhere.
+      {/* Two rows of three equal columns.
           Row 1: বুস্ট (BOOST) | ^ চলুন (ACCEL) | হর্ন (HORN)
-          Row 2: < বাম (LEFT) | BRAKE ব্রেক (DEAD-CENTER) | > ডান (RIGHT)
-          Row 3: v পেছনে (REV) centered under BRAKE */}
+          Row 2: < বাম (LEFT) | v পেছনে (REV) | > ডান (RIGHT) */}
       <div
         className="grid grid-cols-3 gap-2"
         style={{ gridTemplateColumns: 'repeat(3, 5.25rem)' }}
@@ -195,16 +193,16 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onControlChange, v
         </HoldButton>
 
         <HoldButton
-          control="brake"
-          ariaLabel="Brake"
-          primaryLabel="ব্রেক"
-          subLabel="BRAKE"
+          control="reverse"
+          ariaLabel="Reverse"
+          primaryLabel="v পেছনে"
+          subLabel="REV"
           primaryBengali
           onControlChange={onControlChange}
-          className="w-full h-16 bg-gradient-to-b from-red-600/92 to-red-900/95 border-red-300/90 text-red-50"
-          activeClassName="w-full h-16 bg-red-500 border-red-100 text-white ring-2 ring-white/85 shadow-[0_0_24px_rgba(239,68,68,0.8)]"
+          className="w-full h-16 bg-gradient-to-b from-slate-700/92 to-slate-950/95 border-amber-400/75 text-amber-100"
+          activeClassName="w-full h-16 bg-amber-500 border-white text-slate-950 ring-2 ring-white/85 shadow-[0_0_22px_rgba(245,158,11,0.8)]"
         >
-          <OctagonAlert className="w-6 h-6" />
+          <ArrowDown className="w-[1.35rem] h-[1.35rem]" />
         </HoldButton>
 
         <HoldButton
@@ -219,22 +217,6 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onControlChange, v
         >
           <ArrowRight className="w-[1.35rem] h-[1.35rem]" />
         </HoldButton>
-
-        {/* REV sits in the center column, directly under BRAKE */}
-        <div className="col-start-2">
-          <HoldButton
-            control="reverse"
-            ariaLabel="Reverse"
-            primaryLabel="v পেছনে"
-            subLabel="REV"
-            primaryBengali
-            onControlChange={onControlChange}
-            className="w-full h-[3.4rem] bg-gradient-to-b from-slate-700/92 to-slate-950/95 border-amber-400/75 text-amber-100"
-            activeClassName="w-full h-[3.4rem] bg-amber-500 border-white text-slate-950 ring-2 ring-white/85 shadow-[0_0_22px_rgba(245,158,11,0.8)]"
-          >
-            <ArrowDown className="w-[1.15rem] h-[1.15rem]" />
-          </HoldButton>
-        </div>
       </div>
     </div>
   );

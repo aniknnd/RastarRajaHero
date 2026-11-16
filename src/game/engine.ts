@@ -321,7 +321,9 @@ export class HeroRastarEngine {
     this.scene = new THREE.Scene();
     const skyColor = new THREE.Color(0x7dd3fc);
     this.scene.background = skyColor;
-    this.scene.fog = new THREE.FogExp2(0xbae6fd, 0.0038);
+    // Lighter haze: keeps the road crisp well ahead of the bike while still
+    // hiding the world-loop seam in the far distance.
+    this.scene.fog = new THREE.FogExp2(0xbae6fd, 0.0022);
 
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -1247,7 +1249,9 @@ export class HeroRastarEngine {
           : GAME_CONFIG.MAX_SPEED_NORMAL_MPS;
     const maxRevMps = -GAME_CONFIG.MAX_REVERSE_MPS;
 
-    // Touch BRAKE button acts as brake when moving forward fast, otherwise reverse
+    // Touch BRAKE button was removed; REV is the only way to go backward.
+    // Reverse works even when the tank is empty (coast/roll back) so the
+    // button always has an effect instead of doing nothing on low fuel.
     const brakingWithTouchBrake = this.input.brake && this.forwardSpeed > 2.5;
     const reversingWithTouchBrake = this.input.brake && this.forwardSpeed <= 2.5;
 
@@ -1258,7 +1262,7 @@ export class HeroRastarEngine {
     } else if (this.input.reverse || reversingWithTouchBrake) {
       if (this.forwardSpeed > 1.2) {
         accel = -26; // crisp braking first
-      } else if (hasFuel) {
+      } else {
         accel = -11; // reverse
       }
     } else if (this.input.accelerate || hasFreeNitro) {
@@ -2298,8 +2302,13 @@ export class HeroRastarEngine {
 
     const fwdX = -Math.sin(this.playerYaw);
     const fwdZ = -Math.cos(this.playerYaw);
-    const followDist = 4.9 + speedNorm * 1.1;
-    const followHeight = 2.25 + speedNorm * 0.35;
+    // Keep the bike a little in front of frame on every device. On tall
+    // mobile-portrait screens we sit much closer and lower so the bike reads
+    // large and centered instead of shrinking into the distance, while the
+    // HUD + control cluster still have room at the bottom of the screen.
+    const portrait = this.camera.aspect < 1;
+    const followDist = (portrait ? 4.1 : 5.4) + speedNorm * 0.8;
+    const followHeight = (portrait ? 1.95 : 2.4) + speedNorm * 0.3;
 
     _camTarget.set(
       this.playerX - fwdX * followDist + shakeX,

@@ -145,9 +145,9 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             </div>
 
             {/* Control hint */}
-            <div className="text-[11px] text-slate-200 bg-slate-900/90 border border-slate-700 rounded-lg px-3 py-2 text-center">
-              <span className="font-bengali text-amber-300 font-bold">নিয়ন্ত্রণ (Controls):</span>{' '}
-              W / ↑ চলুন · S / ↓ ব্রেক/পেছনে · A/D বা ,/. ডান-বাম · Shift বুস্ট · Space হ্যান্ডব্রেক · H হর্ন
+<div className="text-[11px] text-slate-200 bg-slate-900/90 border border-slate-700 rounded-lg px-3 py-2 text-center">
+              <span className="font-bengali text-amber-300 font-bold">নিয়ন্ত্রণ (Controls):</span>{' '}
+              W / ↑ চলুন · S / ↓ পেছনে · A/D বা ,/. ডান-বাম · Shift বুস্ট · Space হ্যান্ডব্রেক · H হর্ন · স্পর্শে তালিকা নিচে দেখুন
             </div>
 
             <button
