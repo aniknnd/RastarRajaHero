@@ -487,28 +487,52 @@ export function buildHeroMotorcycle(textures: ProceduralTextureSet): HeroBikeRig
 export function buildMetroRailViaductSegment(
   textures: ProceduralTextureSet,
   blockLen: number,
-  hasIntersection: boolean
+  hasIntersection: boolean,
+  blockIdx = 0
 ): THREE.Group {
   const metro = new THREE.Group();
-  const concreteMat = new THREE.MeshStandardMaterial({ color: 0xd6d3d1, roughness: 0.85, metalness: 0.05 });
-  const darkConcreteMat = new THREE.MeshStandardMaterial({ color: 0x78716c, roughness: 0.88 });
+
+  // বৈশাখী মেলার রংতুলি — the whole viaduct structure is hand-painted in
+  // festive Boishakhi-Mela / rickshaw-art colours. Each city block gets a
+  // different mix, and the two piers inside a block never match.
+  const BOISHAKHI_PALETTE = [
+    0xdc2626, // লাল — Boishakhi crimson
+    0xf59e0b, // সরিষা হলুদ — marigold yellow
+    0x059669, // ধান-সবুজ — paddy emerald
+    0x0ea5e9, // আকাশি — monsoon sky blue
+    0xf97316, // কমলা — tangerine
+    0xec4899, // রিকশা গোলাপি — rickshaw pink
+    0x7c3aed, // জাম — festival purple
+    0x0d9488, // টিয়া — teal
+  ];
+  const pal = (offset: number) =>
+    BOISHAKHI_PALETTE[((blockIdx + offset) % BOISHAKHI_PALETTE.length + BOISHAKHI_PALETTE.length) % BOISHAKHI_PALETTE.length];
+  const paintMat = (offset: number): THREE.MeshStandardMaterial =>
+    new THREE.MeshStandardMaterial({ color: pal(offset), roughness: 0.62, metalness: 0.04 });
+
+  // Warm cream deck + deep teal pier bases keep the riot of colour grounded.
+  const creamMat = new THREE.MeshStandardMaterial({ color: 0xfef3c7, roughness: 0.72 });
+  const girderMat = paintMat(0);
+  const deckMat = creamMat;
+  const parapetMat = paintMat(1);
+  const baseMat = new THREE.MeshStandardMaterial({ color: 0x115e59, roughness: 0.78 });
   const railSteelMat = new THREE.MeshStandardMaterial({ color: 0x4b5563, metalness: 0.85, roughness: 0.3 });
   const bannerMat = new THREE.MeshBasicMaterial({ map: textures.metroBanner });
   const pillarSignMat = new THREE.MeshBasicMaterial({ map: textures.pillarSign });
 
-  const girderBottom = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.95, blockLen), concreteMat);
+  const girderBottom = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.95, blockLen), girderMat);
   girderBottom.position.set(0, 6.45, 0);
   girderBottom.castShadow = true;
   girderBottom.receiveShadow = true;
   metro.add(girderBottom);
 
-  const deck = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.45, blockLen), concreteMat);
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.45, blockLen), deckMat);
   deck.position.set(0, 7.12, 0);
   deck.castShadow = true;
   metro.add(deck);
 
   for (const sx of [-3.05, 3.05]) {
-    const parapet = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.85, blockLen), concreteMat);
+    const parapet = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.85, blockLen), parapetMat);
     parapet.position.set(sx, 7.65, 0);
     metro.add(parapet);
   }
@@ -538,17 +562,18 @@ export function buildMetroRailViaductSegment(
   }
 
   const pierOffsets = hasIntersection ? [-28, 28] : [-24, 16];
-  for (const pz of pierOffsets) {
-    const base = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.6, 2.4), darkConcreteMat);
+  for (let pierIdx = 0; pierIdx < pierOffsets.length; pierIdx++) {
+    const pz = pierOffsets[pierIdx];
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.6, 2.4), baseMat);
     base.position.set(0, 0.3, pz);
     metro.add(base);
 
-    const column = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.78, 5.4, 10), concreteMat);
+    const column = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.78, 5.4, 10), paintMat(2 + pierIdx * 2));
     column.position.set(0, 3.0, pz);
     column.castShadow = true;
     metro.add(column);
 
-    const pierCap = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.75, 1.8), concreteMat);
+    const pierCap = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.75, 1.8), creamMat);
     pierCap.position.set(0, 5.85, pz);
     pierCap.castShadow = true;
     metro.add(pierCap);

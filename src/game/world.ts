@@ -554,8 +554,8 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
       }
     }
 
-    // Center Metro Rail Viaduct & Banners + Eye-level Pillar Signs
-    const metroViaduct = buildMetroRailViaductSegment(textures, blockLen, intersectionZ !== undefined);
+    // Center Metro Rail Viaduct & Banners + Eye-level Pillar Signs (বৈশাখী রংতুলি paint)
+    const metroViaduct = buildMetroRailViaductSegment(textures, blockLen, intersectionZ !== undefined, i);
     g.add(metroViaduct);
 
     // Elevated Dhaka Metro Rail Stations (Farmgate, Shahbag, Motijheel) with visible Diagonal Escalators
