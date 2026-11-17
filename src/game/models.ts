@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { ProceduralTextureSet } from './textures';
-import { GAME_CONFIG, VEHICLE_SPECS, type TrafficLightPhase, type VehicleKind } from './types';
+import { GAME_CONFIG, VEHICLE_SPECS, type BikeTierId, type TrafficLightPhase, type VehicleKind } from './types';
 
 export interface HeroBikeRig {
   group: THREE.Group;
@@ -41,6 +41,22 @@ export interface SlapperRig {
 export interface TrafficLightRig {
   group: THREE.Group;
   setPhase: (phase: TrafficLightPhase) => void;
+}
+
+export interface ShowroomAttendantRig {
+  group: THREE.Group;
+  headGroup: THREE.Group;
+  rightArmPivot: THREE.Group;
+  rightForearmPivot: THREE.Group;
+  leftArmPivot: THREE.Group;
+  saluteIntensity: number;
+}
+
+export interface ShowroomStaffInstance {
+  rig: ShowroomAttendantRig;
+  localX: number;
+  localZ: number;
+  baseYaw: number;
 }
 
 function addContactShadow(parent: THREE.Group, tex: THREE.CanvasTexture, w: number, l: number): void {
@@ -135,7 +151,10 @@ function makeSportBikeWheel(outerRadius: number, tubeRadius: number, isFront: bo
   return wheel;
 }
 
-export function buildHeroMotorcycle(textures: ProceduralTextureSet): HeroBikeRig {
+export function buildHeroMotorcycle(
+  textures: ProceduralTextureSet,
+  bikeId: BikeTierId = 'glamour_125'
+): HeroBikeRig {
   const root = new THREE.Group();
   root.scale.setScalar(GAME_CONFIG.BIKE_SCALE);
   addContactShadow(root, textures.contactShadow, 1.65, 3.0);
@@ -143,24 +162,41 @@ export function buildHeroMotorcycle(textures: ProceduralTextureSet): HeroBikeRig
   const leanGroup = new THREE.Group();
   root.add(leanGroup);
 
+  const isXtreme = bikeId === 'xtreme_160r';
+  const isKarizma = bikeId === 'karizma_210';
+
+  const tankTex = isKarizma
+    ? textures.heroTankKarizma
+    : isXtreme
+      ? textures.heroTankXtreme
+      : textures.heroTank;
+
+  const primaryTint = isKarizma ? 0x059669 : isXtreme ? 0x1e293b : 0xdc2626;
+  const cowlColor = isKarizma ? 0x047857 : isXtreme ? 0xf59e0b : 0xb91c1c;
+  const trimAccentColor = isKarizma ? 0xfacc15 : isXtreme ? 0xef4444 : 0xf59e0b;
+
   const redPaint = new THREE.MeshPhysicalMaterial({
-    color: 0xdc2626,
-    roughness: 0.2,
-    metalness: 0.48,
-    clearcoat: 0.95,
-    clearcoatRoughness: 0.08,
-    map: textures.heroTank,
+    color: isKarizma || isXtreme ? 0xffffff : primaryTint,
+    roughness: 0.18,
+    metalness: 0.52,
+    clearcoat: 0.96,
+    clearcoatRoughness: 0.06,
+    map: tankTex,
   });
   const redCowl = new THREE.MeshPhysicalMaterial({
-    color: 0xb91c1c,
-    roughness: 0.24,
-    metalness: 0.4,
-    clearcoat: 0.85,
+    color: cowlColor,
+    roughness: 0.22,
+    metalness: 0.45,
+    clearcoat: 0.88,
   });
   const matteBlack = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.72, metalness: 0.25 });
   const gunmetal = new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.36, metalness: 0.78 });
   const chromeMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.14, metalness: 0.95 });
-  const goldForkMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.24, metalness: 0.85 });
+  const goldForkMat = new THREE.MeshStandardMaterial({
+    color: isKarizma ? 0xfde047 : 0xf59e0b,
+    roughness: 0.22,
+    metalness: 0.88,
+  });
   const seatMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.88, metalness: 0.04 });
   const tintedGlassMat = new THREE.MeshPhysicalMaterial({
     color: 0x09090b,
@@ -255,11 +291,51 @@ export function buildHeroMotorcycle(textures: ProceduralTextureSet): HeroBikeRig
   leanGroup.add(fuelPortTip);
 
   for (const sx of [-0.21, 0.21]) {
-    const shroud = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.24, 0.36), redCowl);
-    shroud.position.set(sx, 0.78, -0.32);
+    const shroud = new THREE.Mesh(
+      new THREE.BoxGeometry(isKarizma ? 0.075 : 0.05, isKarizma ? 0.32 : isXtreme ? 0.28 : 0.24, isKarizma ? 0.56 : 0.36),
+      redCowl
+    );
+    shroud.position.set(sx, isKarizma ? 0.74 : 0.78, -0.32);
     shroud.rotation.x = 0.24;
     shroud.rotation.y = sx > 0 ? -0.15 : 0.15;
     leanGroup.add(shroud);
+  }
+
+  // Tier 2 / Tier 3 sculpted belly pan & aerodynamic lower fairings
+  if (isXtreme || isKarizma) {
+    const bellyPan = new THREE.Mesh(
+      new THREE.BoxGeometry(0.32, 0.16, 0.56),
+      isKarizma ? matteBlack : redCowl
+    );
+    bellyPan.position.set(0, 0.25, -0.06);
+    bellyPan.rotation.x = -0.14;
+    leanGroup.add(bellyPan);
+  }
+
+  if (isKarizma) {
+    // Full-faired side wings + front titanium ram/bull bumper
+    for (const sx of [-0.24, 0.24]) {
+      const sideFairing = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.44, 0.64), redCowl);
+      sideFairing.position.set(sx, 0.58, -0.38);
+      sideFairing.rotation.x = 0.12;
+      leanGroup.add(sideFairing);
+
+      const goldAccent = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 0.07, 0.58),
+        new THREE.MeshStandardMaterial({ color: trimAccentColor, roughness: 0.25, metalness: 0.85 })
+      );
+      goldAccent.position.set(sx, 0.62, -0.38);
+      leanGroup.add(goldAccent);
+    }
+
+    const ramBar = new THREE.Mesh(
+      new THREE.TorusGeometry(0.24, 0.032, 8, 16, Math.PI),
+      goldForkMat
+    );
+    ramBar.rotation.x = Math.PI / 2;
+    ramBar.rotation.z = Math.PI;
+    ramBar.position.set(0, 0.52, -0.92);
+    leanGroup.add(ramBar);
   }
 
   const seatShape = new THREE.Shape();
@@ -324,12 +400,28 @@ export function buildHeroMotorcycle(textures: ProceduralTextureSet): HeroBikeRig
   mufflerShield.position.set(0.31, 0.46, 0.78);
   leanGroup.add(mufflerShield);
 
+  if (isXtreme || isKarizma) {
+    // Left twin sport exhaust cannon for upgraded Hero bikes
+    const mufflerL = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.055, 0.54, 12), gunmetal);
+    mufflerL.rotation.x = Math.PI / 2 - 0.28;
+    mufflerL.position.set(-0.25, 0.46, 0.78);
+    mufflerL.castShadow = true;
+    const shieldL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.09, 0.4), isKarizma ? goldForkMat : chromeMat);
+    shieldL.rotation.x = -0.28;
+    shieldL.position.set(-0.31, 0.46, 0.78);
+    leanGroup.add(mufflerL, shieldL);
+  }
+
   const exhaustTip = new THREE.Object3D();
   exhaustTip.position.set(0.25, 0.55, 1.06);
   leanGroup.add(exhaustTip);
 
-  const flameMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.88 });
-  const boostFlame = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.62, 10), flameMat);
+  const flameMat = new THREE.MeshBasicMaterial({
+    color: isKarizma ? 0x34d399 : isXtreme ? 0xfbbf24 : 0x38bdf8,
+    transparent: true,
+    opacity: 0.9,
+  });
+  const boostFlame = new THREE.Mesh(new THREE.ConeGeometry(isKarizma ? 0.12 : 0.09, isKarizma ? 0.78 : 0.62, 10), flameMat);
   boostFlame.rotation.x = Math.PI / 2;
   boostFlame.position.set(0.25, 0.57, 1.32);
   boostFlame.visible = false;
@@ -365,14 +457,22 @@ export function buildHeroMotorcycle(textures: ProceduralTextureSet): HeroBikeRig
   cowl.rotation.x = 0.28;
   frontFork.add(cowl);
 
-  const windscreen = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.2, 0.04), tintedGlassMat);
-  windscreen.position.set(0, 1.1, -0.64);
+  const windscreen = new THREE.Mesh(
+    new THREE.BoxGeometry(isKarizma ? 0.34 : 0.24, isKarizma ? 0.32 : 0.2, 0.04),
+    tintedGlassMat
+  );
+  windscreen.position.set(0, isKarizma ? 1.15 : 1.1, -0.64);
   windscreen.rotation.x = -0.65;
   frontFork.add(windscreen);
 
   const headlightLens = new THREE.Mesh(
-    new THREE.BoxGeometry(0.2, 0.13, 0.05),
-    new THREE.MeshStandardMaterial({ color: 0xfef9c3, emissive: 0xfef08a, emissiveIntensity: 2.1, roughness: 0.1 })
+    new THREE.BoxGeometry(isKarizma ? 0.28 : 0.2, 0.13, 0.05),
+    new THREE.MeshStandardMaterial({
+      color: isKarizma ? 0xd1fae5 : 0xfef9c3,
+      emissive: isKarizma ? 0x6ee7b7 : isXtreme ? 0xfef08a : 0xfef08a,
+      emissiveIntensity: isKarizma ? 2.6 : 2.1,
+      roughness: 0.1,
+    })
   );
   headlightLens.position.set(0, 0.93, -0.82);
   headlightLens.rotation.x = 0.2;
@@ -412,9 +512,20 @@ export function buildHeroMotorcycle(textures: ProceduralTextureSet): HeroBikeRig
   }
 
   // Rider
-  const jacketMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.72 });
-  const accentMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.45 });
-  const helmetMat = new THREE.MeshPhysicalMaterial({ color: 0xef4444, roughness: 0.16, metalness: 0.4, clearcoat: 0.92 });
+  const jacketMat = new THREE.MeshStandardMaterial({
+    color: isKarizma ? 0x064e3b : isXtreme ? 0x1f2937 : 0x0f172a,
+    roughness: 0.7,
+  });
+  const accentMat = new THREE.MeshStandardMaterial({
+    color: trimAccentColor,
+    roughness: 0.4,
+  });
+  const helmetMat = new THREE.MeshPhysicalMaterial({
+    color: isKarizma ? 0x10b981 : isXtreme ? 0xf59e0b : 0xef4444,
+    roughness: 0.15,
+    metalness: 0.45,
+    clearcoat: 0.94,
+  });
   const visorMat = new THREE.MeshPhysicalMaterial({ color: 0x09090b, roughness: 0.08, metalness: 0.88, clearcoat: 1.0 });
 
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.52, 0.25), jacketMat);
@@ -947,6 +1058,51 @@ export function buildTrafficVehicle(
     return { group, wheels, halfWidth: spec.halfWidth, halfLength: spec.halfLength, isLarge };
   }
 
+  if (kind === 'suv_prado') {
+    const len = spec.halfLength * 2;
+    const wid = spec.halfWidth * 2;
+    addContactShadow(group, textures.contactShadow, wid + 0.5, len + 0.5);
+    const bodyMat = new THREE.MeshPhysicalMaterial({
+      color: variantIdx % 2 === 0 ? 0xf8fafc : 0x0f172a,
+      roughness: 0.2,
+      metalness: 0.48,
+      clearcoat: 0.9,
+    });
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.1, metalness: 0.7 });
+    const chromeMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.18, metalness: 0.92 });
+
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(wid, 0.74, len), bodyMat);
+    chassis.position.set(0, 0.66, 0);
+    chassis.castShadow = true;
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(wid * 0.9, 0.62, len * 0.68), glassMat);
+    cabin.position.set(0, 1.32, 0.25);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(wid * 0.88, 0.12, len * 0.66), bodyMat);
+    roof.position.set(0, 1.66, 0.25);
+    const grille = new THREE.Mesh(new THREE.BoxGeometry(wid * 0.68, 0.36, 0.08), chromeMat);
+    grille.position.set(0, 0.68, -len / 2 - 0.02);
+    const spareWheel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.34, 0.34, 0.22, 12),
+      new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.8 })
+    );
+    spareWheel.rotation.x = Math.PI / 2;
+    spareWheel.position.set(0, 0.92, len / 2 + 0.1);
+    group.add(chassis, cabin, roof, grille, spareWheel);
+
+    for (const [px, pz] of [
+      [-wid * 0.46, -len * 0.32],
+      [wid * 0.46, -len * 0.32],
+      [-wid * 0.46, len * 0.32],
+      [wid * 0.46, len * 0.32],
+    ]) {
+      const w = makeWheel(0.37, 0.24, 0xd1d5db);
+      w.position.set(px, 0.37, pz);
+      group.add(w);
+      wheels.push(w);
+    }
+
+    return { group, wheels, halfWidth: spec.halfWidth, halfLength: spec.halfLength, isLarge };
+  }
+
   if (kind === 'pickup') {
     const len = spec.halfLength * 2;
     const wid = spec.halfWidth * 2;
@@ -1125,6 +1281,223 @@ export function buildTrafficVehicle(
     ]) {
       const w = makeWheel(0.42, 0.28, 0x9ca3af);
       w.position.set(px, 0.42, pz);
+      group.add(w);
+      wheels.push(w);
+    }
+
+    return { group, wheels, halfWidth: spec.halfWidth, halfLength: spec.halfLength, isLarge: true };
+  }
+
+  // === LARGE TIER: BRTC DOUBLE-DECKER BUS (TITAN) ===
+  if (kind === 'bus_double_decker') {
+    const len = spec.halfLength * 2;
+    const wid = spec.halfWidth * 2;
+    addContactShadow(group, textures.contactShadow, wid + 0.6, len + 0.8);
+
+    const sideMat = new THREE.MeshStandardMaterial({ map: textures.doubleDeckerLivery, roughness: 0.35 });
+    const upperMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.36 });
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.14 });
+
+    const lowerDeck = new THREE.Mesh(new THREE.BoxGeometry(wid, 1.75, len), sideMat);
+    lowerDeck.position.set(0, 1.28, 0);
+    lowerDeck.castShadow = true;
+    const upperDeck = new THREE.Mesh(new THREE.BoxGeometry(wid * 0.98, 1.65, len * 0.98), upperMat);
+    upperDeck.position.set(0, 2.98, 0);
+    upperDeck.castShadow = true;
+    const roof = new THREE.Mesh(
+      new THREE.BoxGeometry(wid * 0.95, 0.16, len * 0.96),
+      new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.45 })
+    );
+    roof.position.set(0, 3.86, 0);
+
+    const lowerGlass = new THREE.Mesh(new THREE.BoxGeometry(wid * 0.86, 0.72, 0.1), glassMat);
+    lowerGlass.position.set(0, 1.52, -len / 2 - 0.02);
+    const upperGlass = new THREE.Mesh(new THREE.BoxGeometry(wid * 0.86, 0.72, 0.1), glassMat);
+    upperGlass.position.set(0, 3.05, -len / 2 - 0.02);
+    group.add(lowerDeck, upperDeck, roof, lowerGlass, upperGlass);
+
+    for (const [px, pz] of [
+      [-wid * 0.45, -len * 0.32],
+      [wid * 0.45, -len * 0.32],
+      [-wid * 0.45, len * 0.3],
+      [wid * 0.45, len * 0.3],
+    ]) {
+      const w = makeWheel(0.44, 0.28, 0x9ca3af);
+      w.position.set(px, 0.44, pz);
+      group.add(w);
+      wheels.push(w);
+    }
+
+    return { group, wheels, halfWidth: spec.halfWidth, halfLength: spec.halfLength, isLarge: true };
+  }
+
+  // === LARGE TIER: COVERED VAN ===
+  if (kind === 'covered_van') {
+    const len = spec.halfLength * 2;
+    const wid = spec.halfWidth * 2;
+    addContactShadow(group, textures.contactShadow, wid + 0.5, len + 0.6);
+
+    const cabMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35 });
+    const boxMat = new THREE.MeshStandardMaterial({ map: textures.coveredVanLivery, roughness: 0.45 });
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.15 });
+
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(wid * 0.9, 1.7, 1.8), cabMat);
+    cab.position.set(0, 1.25, -len / 2 + 0.92);
+    cab.castShadow = true;
+    const windshield = new THREE.Mesh(new THREE.BoxGeometry(wid * 0.78, 0.62, 0.1), glassMat);
+    windshield.position.set(0, 1.58, -len / 2 + 0.01);
+    const cargoBox = new THREE.Mesh(new THREE.BoxGeometry(wid, 2.25, len - 1.95), boxMat);
+    cargoBox.position.set(0, 1.65, 0.92);
+    cargoBox.castShadow = true;
+    group.add(cab, windshield, cargoBox);
+
+    for (const [px, pz] of [
+      [-wid * 0.44, -len * 0.32],
+      [wid * 0.44, -len * 0.32],
+      [-wid * 0.44, len * 0.28],
+      [wid * 0.44, len * 0.28],
+    ]) {
+      const w = makeWheel(0.4, 0.26, 0xd1d5db);
+      w.position.set(px, 0.4, pz);
+      group.add(w);
+      wheels.push(w);
+    }
+
+    return { group, wheels, halfWidth: spec.halfWidth, halfLength: spec.halfLength, isLarge: true };
+  }
+
+  // === LARGE TIER: NITOL CEMENT MIXER ===
+  if (kind === 'cement_mixer') {
+    const len = spec.halfLength * 2;
+    const wid = spec.halfWidth * 2;
+    addContactShadow(group, textures.contactShadow, wid + 0.5, len + 0.6);
+
+    const cabMat = new THREE.MeshStandardMaterial({ color: 0x065f46, roughness: 0.4 });
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6 });
+    const drumMat = new THREE.MeshStandardMaterial({ map: textures.cementMixerLivery, roughness: 0.42 });
+
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(wid * 0.9, 0.45, len), frameMat);
+    chassis.position.set(0, 0.65, 0);
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(wid * 0.92, 1.75, 1.85), cabMat);
+    cab.position.set(0, 1.32, -len / 2 + 0.95);
+    cab.castShadow = true;
+    const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.72, 3.6, 14), drumMat);
+    drum.rotation.x = Math.PI / 2 - 0.24;
+    drum.position.set(0, 1.92, 0.85);
+    drum.castShadow = true;
+    const chute = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.2, 1.1), frameMat);
+    chute.position.set(0, 1.35, len / 2 - 0.15);
+    chute.rotation.x = 0.4;
+    group.add(chassis, cab, drum, chute);
+
+    for (const [px, pz] of [
+      [-wid * 0.44, -len * 0.34],
+      [wid * 0.44, -len * 0.34],
+      [-wid * 0.44, len * 0.14],
+      [wid * 0.44, len * 0.14],
+      [-wid * 0.44, len * 0.36],
+      [wid * 0.44, len * 0.36],
+    ]) {
+      const w = makeWheel(0.42, 0.28, 0xfacc15);
+      w.position.set(px, 0.42, pz);
+      group.add(w);
+      wheels.push(w);
+    }
+
+    return { group, wheels, halfWidth: spec.halfWidth, halfLength: spec.halfLength, isLarge: true };
+  }
+
+  // === LARGE TIER: FUEL OIL TANKER (TITAN) ===
+  if (kind === 'oil_tanker') {
+    const len = spec.halfLength * 2;
+    const wid = spec.halfWidth * 2;
+    addContactShadow(group, textures.contactShadow, wid + 0.6, len + 0.7);
+
+    const cabMat = new THREE.MeshStandardMaterial({ color: 0xea580c, roughness: 0.35 });
+    const tankMat = new THREE.MeshPhysicalMaterial({
+      map: textures.oilTankerLivery,
+      roughness: 0.28,
+      metalness: 0.45,
+      clearcoat: 0.7,
+    });
+    const chromeMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.9, roughness: 0.2 });
+
+    const chassis = new THREE.Mesh(
+      new THREE.BoxGeometry(wid * 0.88, 0.4, len),
+      new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.7 })
+    );
+    chassis.position.set(0, 0.62, 0);
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(wid * 0.92, 1.85, 1.9), cabMat);
+    cab.position.set(0, 1.38, -len / 2 + 0.96);
+    cab.castShadow = true;
+    const tankCyl = new THREE.Mesh(new THREE.CylinderGeometry(0.96, 0.96, len - 2.2, 16), tankMat);
+    tankCyl.rotation.x = Math.PI / 2;
+    tankCyl.position.set(0, 1.75, 0.95);
+    tankCyl.castShadow = true;
+    group.add(chassis, cab, tankCyl);
+
+    for (const hz of [-0.6, 0.8, 2.2]) {
+      const hatch = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.16, 10), chromeMat);
+      hatch.position.set(0, 2.75, hz);
+      group.add(hatch);
+    }
+
+    for (const [px, pz] of [
+      [-wid * 0.44, -len * 0.35],
+      [wid * 0.44, -len * 0.35],
+      [-wid * 0.44, len * 0.12],
+      [wid * 0.44, len * 0.12],
+      [-wid * 0.44, len * 0.35],
+      [wid * 0.44, len * 0.35],
+    ]) {
+      const w = makeWheel(0.43, 0.28, 0xd1d5db);
+      w.position.set(px, 0.43, pz);
+      group.add(w);
+      wheels.push(w);
+    }
+
+    return { group, wheels, halfWidth: spec.halfWidth, halfLength: spec.halfLength, isLarge: true };
+  }
+
+  // === LARGE TIER: FIRE SERVICE TRUCK (TITAN) ===
+  if (kind === 'fire_truck') {
+    const len = spec.halfLength * 2;
+    const wid = spec.halfWidth * 2;
+    addContactShadow(group, textures.contactShadow, wid + 0.6, len + 0.7);
+
+    const bodyMat = new THREE.MeshStandardMaterial({ map: textures.fireTruckLivery, roughness: 0.3 });
+    const ladderMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.85, roughness: 0.25 });
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.12 });
+
+    const body = new THREE.Mesh(new THREE.BoxGeometry(wid, 1.95, len), bodyMat);
+    body.position.set(0, 1.42, 0);
+    body.castShadow = true;
+    const windshield = new THREE.Mesh(new THREE.BoxGeometry(wid * 0.84, 0.68, 0.1), glassMat);
+    windshield.position.set(0, 1.78, -len / 2 - 0.02);
+    const ladder = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.22, len * 0.78), ladderMat);
+    ladder.position.set(0, 2.52, 0.4);
+    const sirenL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.48, 0.2, 0.32),
+      new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xdc2626, emissiveIntensity: 2.2 })
+    );
+    sirenL.position.set(-0.42, 2.48, -len / 2 + 0.85);
+    const sirenR = new THREE.Mesh(
+      new THREE.BoxGeometry(0.48, 0.2, 0.32),
+      new THREE.MeshStandardMaterial({ color: 0x3b82f6, emissive: 0x2563eb, emissiveIntensity: 2.2 })
+    );
+    sirenR.position.set(0.42, 2.48, -len / 2 + 0.85);
+    group.add(body, windshield, ladder, sirenL, sirenR);
+
+    for (const [px, pz] of [
+      [-wid * 0.44, -len * 0.34],
+      [wid * 0.44, -len * 0.34],
+      [-wid * 0.44, len * 0.14],
+      [wid * 0.44, len * 0.14],
+      [-wid * 0.44, len * 0.36],
+      [wid * 0.44, len * 0.36],
+    ]) {
+      const w = makeWheel(0.43, 0.28, 0xfacc15);
+      w.position.set(px, 0.43, pz);
       group.add(w);
       wheels.push(w);
     }
@@ -1350,6 +1723,264 @@ export function buildFuelStation(textures: ProceduralTextureSet, faceRight = tru
   }
 
   return station;
+}
+
+export function buildShowroomAttendant(variant: 0 | 1 | 2 = 0): ShowroomAttendantRig {
+  const group = new THREE.Group();
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xb47b56, roughness: 0.72 });
+  const shirtColor = variant === 1 ? 0x111827 : 0xdc2626;
+  const shirtMat = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.55 });
+  const trimGoldMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3, metalness: 0.6 });
+  const pantsMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+  const capMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.5 });
+  const shoeMat = new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.65 });
+
+  // Legs & polished shoes
+  const legGeo = new THREE.BoxGeometry(0.15, 0.72, 0.17);
+  legGeo.translate(0, -0.36, 0);
+  const leftLeg = new THREE.Mesh(legGeo, pantsMat);
+  leftLeg.position.set(0.11, 0.72, 0);
+  leftLeg.castShadow = true;
+  const rightLeg = new THREE.Mesh(legGeo, pantsMat);
+  rightLeg.position.set(-0.11, 0.72, 0);
+  rightLeg.castShadow = true;
+
+  for (const sx of [-0.11, 0.11]) {
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.24), shoeMat);
+    shoe.position.set(sx, 0.04, 0.03);
+    group.add(shoe);
+  }
+
+  // Uniform Torso + Gold Hero Crest Badge on chest (+Z front)
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.64, 0.25), shirtMat);
+  torso.position.set(0, 1.04, 0);
+  torso.castShadow = true;
+
+  const badge = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.04), trimGoldMat);
+  badge.position.set(0.11, 1.18, 0.13);
+
+  const collar = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.08, 0.27), trimGoldMat);
+  collar.position.set(0, 1.35, 0);
+
+  // Left arm (body +X)
+  const leftArmPivot = new THREE.Group();
+  leftArmPivot.position.set(0.29, 1.29, 0);
+  const leftSleeve = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.22, 0.14), shirtMat);
+  leftSleeve.position.set(0, -0.1, 0);
+  const leftForearm = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.34, 0.12), skinMat);
+  leftForearm.position.set(0, -0.35, 0);
+  leftArmPivot.add(leftSleeve, leftForearm);
+
+  // Articulated Right Arm (body -X) with elbow pivot for crisp VIP salute
+  const rightArmPivot = new THREE.Group();
+  rightArmPivot.position.set(-0.29, 1.29, 0);
+  const rightUpper = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.28, 0.14), shirtMat);
+  rightUpper.position.set(0, -0.13, 0);
+  rightArmPivot.add(rightUpper);
+
+  const rightForearmPivot = new THREE.Group();
+  rightForearmPivot.position.set(0, -0.26, 0);
+  const rightForearm = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.28, 0.11), skinMat);
+  rightForearm.position.set(0, -0.14, 0);
+  const rightHand = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.11, 0.06), skinMat);
+  rightHand.position.set(0, -0.3, 0.02);
+  rightForearmPivot.add(rightForearm, rightHand);
+  rightArmPivot.add(rightForearmPivot);
+
+  // Head + Peaked Niloy Hero Cap facing +Z
+  const headGroup = new THREE.Group();
+  headGroup.position.set(0, 1.52, 0);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.165, 12, 10), skinMat);
+  head.castShadow = true;
+  const capCrown = new THREE.Mesh(new THREE.SphereGeometry(0.175, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.52), capMat);
+  capCrown.position.set(0, 0.03, 0);
+  const capVisor = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.035, 0.16), trimGoldMat);
+  capVisor.position.set(0, 0.045, 0.15);
+  headGroup.add(head, capCrown, capVisor);
+
+  group.scale.setScalar(1.08);
+  group.add(leftLeg, rightLeg, torso, badge, collar, leftArmPivot, rightArmPivot, headGroup);
+
+  return {
+    group,
+    headGroup,
+    rightArmPivot,
+    rightForearmPivot,
+    leftArmPivot,
+    saluteIntensity: 0,
+  };
+}
+
+export function buildNiloyHeroShowroom(
+  textures: ProceduralTextureSet,
+  faceRight = true
+): { group: THREE.Group; displayBikes: THREE.Object3D[]; attendants: ShowroomStaffInstance[] } {
+  const showroom = new THREE.Group();
+  const displayBikes: THREE.Object3D[] = [];
+  const attendants: ShowroomStaffInstance[] = [];
+  const dir = faceRight ? 1 : -1;
+
+  // 1. Road-edge Niloy Hero Stopping Pad (5.8 x 18 -> exact 1:3 aspect match for 512x1536)
+  const padMat = new THREE.MeshStandardMaterial({
+    map: textures.showroomPad,
+    roughness: 0.65,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  });
+  const pad = new THREE.Mesh(new THREE.PlaneGeometry(5.8, 18.0), padMat);
+  pad.rotation.x = -Math.PI / 2;
+  pad.position.set(dir * 1.1, 0.036, 0);
+  pad.receiveShadow = true;
+  showroom.add(pad);
+
+  const crimsonMat = new THREE.MeshPhysicalMaterial({ color: 0xb91c1c, roughness: 0.26, clearcoat: 0.8 });
+  const darkSteelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4, metalness: 0.72 });
+  const goldMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.25, metalness: 0.85 });
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, metalness: 0.2 });
+  const glassMat = new THREE.MeshPhysicalMaterial({
+    color: 0x93c5fd,
+    roughness: 0.08,
+    metalness: 0.15,
+    transparent: true,
+    opacity: 0.38,
+  });
+
+  // 2. Elevated Showroom Plinth & Glass Pavilion behind pad
+  const plinth = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.3, 18.5), floorMat);
+  plinth.position.set(-dir * 8.2, 0.15, 0);
+  plinth.receiveShadow = true;
+  showroom.add(plinth);
+
+  const backWall = new THREE.Mesh(new THREE.BoxGeometry(0.45, 5.4, 18.2), darkSteelMat);
+  backWall.position.set(-dir * 12.8, 2.85, 0);
+  backWall.castShadow = true;
+  showroom.add(backWall);
+
+  for (const ez of [-8.9, 8.9]) {
+    const sideWall = new THREE.Mesh(new THREE.BoxGeometry(9.2, 5.4, 0.35), darkSteelMat);
+    sideWall.position.set(-dir * 8.2, 2.85, ez);
+    showroom.add(sideWall);
+  }
+
+  // Front glass showcase window & steel mullions
+  const frontGlass = new THREE.Mesh(new THREE.BoxGeometry(0.12, 4.4, 17.4), glassMat);
+  frontGlass.position.set(-dir * 3.65, 2.5, 0);
+  showroom.add(frontGlass);
+
+  for (const pz of [-8.6, -2.8, 2.8, 8.6]) {
+    const col = new THREE.Mesh(new THREE.BoxGeometry(0.42, 5.6, 0.42), crimsonMat);
+    col.position.set(-dir * 3.55, 2.8, pz);
+    col.castShadow = true;
+    showroom.add(col);
+  }
+
+  // 3. Cantilevered Niloy Hero Red-Gold Canopy reaching over the pad
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(11.6, 0.68, 19.6), darkSteelMat);
+  roof.position.set(-dir * 7.2, 5.85, 0);
+  roof.castShadow = true;
+  showroom.add(roof);
+
+  const fasciaRed = new THREE.Mesh(new THREE.BoxGeometry(11.8, 0.42, 19.8), crimsonMat);
+  fasciaRed.position.set(-dir * 7.2, 5.38, 0);
+  showroom.add(fasciaRed);
+
+  const fasciaGold = new THREE.Mesh(new THREE.BoxGeometry(11.9, 0.14, 19.9), goldMat);
+  fasciaGold.position.set(-dir * 7.2, 5.12, 0);
+  showroom.add(fasciaGold);
+
+  // 4. Illuminated Rooftop & End Gantry Showroom Banners (proper backing boxes, zero roof clipping, crisp ratios)
+  const sideHousing = new THREE.Mesh(new THREE.BoxGeometry(0.46, 2.82, 17.0), darkSteelMat);
+  sideHousing.position.set(-dir * 1.65, 7.62, 0);
+  showroom.add(sideHousing);
+
+  const sideTopTrim = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.12, 17.1), goldMat);
+  sideTopTrim.position.set(-dir * 1.65, 9.05, 0);
+  showroom.add(sideTopTrim);
+
+  const facadeMat = new THREE.MeshBasicMaterial({ map: textures.showroomFacadeSign });
+  const sideSign = new THREE.Mesh(new THREE.PlaneGeometry(16.6, 2.66), facadeMat);
+  sideSign.position.set(-dir * 1.4, 7.62, 0);
+  sideSign.rotation.y = (dir * Math.PI) / 2;
+  showroom.add(sideSign);
+
+  const bannerMat = new THREE.MeshBasicMaterial({ map: textures.showroomBanner });
+  for (const endDir of [-1, 1]) {
+    const gantryBox = new THREE.Mesh(new THREE.BoxGeometry(10.8, 2.75, 0.36), darkSteelMat);
+    gantryBox.position.set(-dir * 7.2, 7.58, endDir * 9.65);
+    showroom.add(gantryBox);
+
+    for (const sx of [-dir * 3.0, -dir * 11.4]) {
+      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.55, 0.28), goldMat);
+      strut.position.set(sx, 6.28, endDir * 9.65);
+      showroom.add(strut);
+    }
+
+    const endSign = new THREE.Mesh(new THREE.PlaneGeometry(10.5, 2.55), bannerMat);
+    endSign.position.set(-dir * 7.2, 7.58, endDir * 9.85);
+    if (endDir < 0) endSign.rotation.y = Math.PI;
+    showroom.add(endSign);
+  }
+
+  // Roadside Hero Dealership Pylon Totem at approach edge of showroom bay
+  const pylonPedestal = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.9, 0.52), crimsonMat);
+  pylonPedestal.position.set(-dir * 2.55, 0.45, 9.95);
+  const pylonBody = new THREE.Mesh(new THREE.BoxGeometry(1.75, 3.45, 0.44), darkSteelMat);
+  pylonBody.position.set(-dir * 2.55, 2.62, 9.95);
+  const pylonMat = new THREE.MeshBasicMaterial({ map: textures.showroomPylonSign });
+  const pylonFront = new THREE.Mesh(new THREE.PlaneGeometry(1.62, 3.24), pylonMat);
+  pylonFront.position.set(-dir * 2.55, 2.62, 10.19);
+  const pylonBack = new THREE.Mesh(new THREE.PlaneGeometry(1.62, 3.24), pylonMat);
+  pylonBack.position.set(-dir * 2.55, 2.62, 9.71);
+  pylonBack.rotation.y = Math.PI;
+  showroom.add(pylonPedestal, pylonBody, pylonFront, pylonBack);
+
+  // 5. Two Rotating Display Bikes inside the glass showroom (Xtreme 160R & Karizma 210)
+  const displayDefs: { id: BikeTierId; z: number }[] = [
+    { id: 'xtreme_160r', z: -4.4 },
+    { id: 'karizma_210', z: 4.4 },
+  ];
+  for (const def of displayDefs) {
+    const turntable = new THREE.Group();
+    turntable.position.set(-dir * 6.8, 0.32, def.z);
+
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.75, 1.9, 0.24, 24), crimsonMat);
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(1.82, 1.82, 0.08, 24), goldMat);
+    ring.position.y = 0.12;
+    turntable.add(disc, ring);
+
+    const bikeRig = buildHeroMotorcycle(textures, def.id);
+    bikeRig.group.scale.setScalar(1.15);
+    bikeRig.group.position.set(0, 0.14, 0);
+    bikeRig.group.rotation.y = dir * 0.45;
+    turntable.add(bikeRig.group);
+
+    showroom.add(turntable);
+    displayBikes.push(turntable);
+  }
+
+  // 6. Three Uniformed Niloy Hero Showroom Staff standing along the entrance apron to welcome & salute!
+  const staffSpots: { z: number; variant: 0 | 1 | 2 }[] = [
+    { z: -5.6, variant: 0 },
+    { z: 0.0, variant: 1 },
+    { z: 5.6, variant: 2 },
+  ];
+  const baseYaw = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+  for (const spot of staffSpots) {
+    const rig = buildShowroomAttendant(spot.variant);
+    const localX = -dir * 2.45;
+    rig.group.position.set(localX, 0.04, spot.z);
+    rig.group.rotation.y = baseYaw;
+    showroom.add(rig.group);
+    attendants.push({
+      rig,
+      localX,
+      localZ: spot.z,
+      baseYaw,
+    });
+  }
+
+  return { group: showroom, displayBikes, attendants };
 }
 
 export function buildTrafficLight(): TrafficLightRig {

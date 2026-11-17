@@ -7,19 +7,27 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameHUD } from './components/GameHUD';
 import { TouchControls } from './components/TouchControls';
 import { HeroRastarEngine } from './game/engine';
-import { GameState, type HudSnapshot, type InputState } from './game/types';
+import { GameState, type BikeTierId, type HudSnapshot, type InputState } from './game/types';
 
 const INITIAL_HUD: HudSnapshot = {
   gameState: GameState.MENU,
   score: 0,
+  bankScore: 0,
   bestScore: 0,
   isNewBest: false,
+  equippedBikeId: 'glamour_125',
+  unlockedBikes: ['glamour_125'],
   speedKmh: 0,
   speedNorm: 0,
   fuelPercent: 100,
+  fuelAmount: 100,
+  fuelCapacity: 100,
   isRefueling: false,
   isInFuelZone: false,
   nearestPumpMeters: 342,
+  isInShowroomZone: false,
+  nearestShowroomMeters: 30,
+  nextUnlockBikeId: 'xtreme_160r',
   combo: 1,
   comboTimerNorm: 0,
   feverActive: false,
@@ -43,6 +51,7 @@ const INITIAL_HUD: HudSnapshot = {
   screenFlashTone: 'none',
   gameOverReasonBn: '',
   gameOverReasonEn: '',
+  gameOverRoastsBn: [],
   lapCount: 1,
   zoneLabelBn: 'ফার্মগেট • ফার্মগেট মেট্রো',
   upcomingLight: null,
@@ -95,6 +104,18 @@ export default function App() {
     engineRef.current?.setTouchControl(control, pressed);
   }, []);
 
+  const handleOpenShowroom = useCallback(() => {
+    engineRef.current?.openShowroomFromMenu();
+  }, []);
+
+  const handleCloseShowroom = useCallback(() => {
+    engineRef.current?.closeShowroom();
+  }, []);
+
+  const handleSelectBike = useCallback((bikeId: BikeTierId) => {
+    return engineRef.current?.purchaseOrEquipBike(bikeId);
+  }, []);
+
   return (
     <main className="relative w-screen h-screen overflow-hidden bg-amber-950 select-none">
       {/* Isolated WebGL viewport container */}
@@ -108,6 +129,9 @@ export default function App() {
         onStart={handleStart}
         onToggleMute={handleToggleMute}
         onToggleTouchControls={handleToggleTouchControls}
+        onOpenShowroom={handleOpenShowroom}
+        onCloseShowroom={handleCloseShowroom}
+        onSelectBike={handleSelectBike}
       />
 
       {/* Lower-center multi-touch driving cluster (BRAKE centered) */}

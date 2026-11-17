@@ -15,6 +15,10 @@ export interface ProceduralTextureSet {
   sidewalk: THREE.CanvasTexture;
   fuelPad: THREE.CanvasTexture;
   fuelCanopySign: THREE.CanvasTexture;
+  showroomPad: THREE.CanvasTexture;
+  showroomFacadeSign: THREE.CanvasTexture;
+  showroomBanner: THREE.CanvasTexture;
+  showroomPylonSign: THREE.CanvasTexture;
   metroBanner: THREE.CanvasTexture;
   metroStationBoards: THREE.CanvasTexture[];
   escalatorSign: THREE.CanvasTexture;
@@ -28,6 +32,11 @@ export interface ProceduralTextureSet {
   busBrtc: THREE.CanvasTexture;
   busHanif: THREE.CanvasTexture;
   busShohag: THREE.CanvasTexture;
+  doubleDeckerLivery: THREE.CanvasTexture;
+  coveredVanLivery: THREE.CanvasTexture;
+  cementMixerLivery: THREE.CanvasTexture;
+  oilTankerLivery: THREE.CanvasTexture;
+  fireTruckLivery: THREE.CanvasTexture;
   policeLivery: THREE.CanvasTexture;
   rabLivery: THREE.CanvasTexture;
   armyLivery: THREE.CanvasTexture;
@@ -38,6 +47,8 @@ export interface ProceduralTextureSet {
   cngBacks: THREE.CanvasTexture[];
   vangariBack: THREE.CanvasTexture;
   heroTank: THREE.CanvasTexture;
+  heroTankXtreme: THREE.CanvasTexture;
+  heroTankKarizma: THREE.CanvasTexture;
   buildingFacades: THREE.CanvasTexture[];
   shopSigns: THREE.CanvasTexture[];
   roadSigns: THREE.CanvasTexture[];
@@ -246,6 +257,213 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     ctx.fillStyle = '#111827';
     ctx.font = 'bold 20px "Chakra Petch", sans-serif';
     ctx.fillText('NITOL-NILOY FUEL STOP  •  24H PETROL & OCTANE', 256, 112);
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
+  // 5b. Niloy Hero Showroom Pad (512x1536 -> matches 5.8x18 bay cleanly, zero stretch)
+  const showroomPad = (() => {
+    const [c, ctx] = makeCanvas(512, 1536);
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(0, 0, 512, 1536);
+
+    // Outer crimson & gold checkered safety border
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 28;
+    ctx.strokeRect(14, 14, 484, 1508);
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 10;
+    ctx.strokeRect(36, 36, 440, 1464);
+
+    // Inner dark metallic tarmac bay
+    ctx.fillStyle = '#090d16';
+    ctx.fillRect(54, 54, 404, 1428);
+
+    // Top & Bottom entry chevrons
+    ctx.fillStyle = '#22c55e';
+    for (const cy of [170, 260, 1276, 1366]) {
+      ctx.beginPath();
+      ctx.moveTo(140, cy + 32);
+      ctx.lineTo(256, cy - 22);
+      ctx.lineTo(372, cy + 32);
+      ctx.lineTo(372, cy + 56);
+      ctx.lineTo(256, cy + 4);
+      ctx.lineTo(140, cy + 56);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Center Hero Crest Badge
+    ctx.fillStyle = '#b91c1c';
+    ctx.fillRect(88, 430, 336, 150);
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(88, 430, 336, 150);
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 58px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('নিলয় হিরো', 256, 505);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 46px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('বাইক শোরুম', 256, 675);
+
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 34px "Chakra Petch", sans-serif';
+    ctx.fillText('NILOY HERO', 256, 770);
+
+    ctx.fillStyle = '#4ade80';
+    ctx.font = 'bold 36px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('আপগ্রেড জোন', 256, 895);
+
+    ctx.fillStyle = '#fef08a';
+    ctx.font = 'bold 26px "Chakra Petch", sans-serif';
+    ctx.fillText('SLOW <= 25 KM/H', 256, 980);
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
+  // 5c. Niloy Hero Showroom Facade Sign (1536x256 -> exact 6:1 match for 16.8x2.8 lightbox)
+  const showroomFacadeSign = (() => {
+    const [c, ctx] = makeCanvas(1536, 256);
+    const bgGrad = ctx.createLinearGradient(0, 0, 1536, 256);
+    bgGrad.addColorStop(0, '#090d16');
+    bgGrad.addColorStop(0.55, '#111827');
+    bgGrad.addColorStop(1, '#450a0a');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, 1536, 256);
+
+    // Sleek racing accent stripes on right edge
+    ctx.fillStyle = '#dc2626';
+    ctx.beginPath();
+    ctx.moveTo(1370, 0);
+    ctx.lineTo(1536, 0);
+    ctx.lineTo(1536, 256);
+    ctx.lineTo(1310, 256);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(0, 0, 1536, 12);
+    ctx.fillRect(0, 244, 1536, 12);
+
+    // Hero Emblem Block on left
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(36, 36, 184, 184);
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(36, 36, 184, 184);
+
+    // Hero stylized "H" wing emblem
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(72, 62, 26, 90);
+    ctx.fillRect(158, 62, 26, 90);
+    ctx.fillRect(98, 96, 60, 22);
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 30px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('HERO', 128, 186);
+
+    // Main Crisp Title
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 72px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('নিলয় হিরো শোরুম • নিলয় মোটরস লি.', 790, 96);
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 32px "Chakra Petch", sans-serif';
+    ctx.fillText('NILOY HERO FLAGSHIP SHOWROOM  •  UPGRADE & SUPERBIKE HUB', 790, 182);
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
+  // 5d. Niloy Hero Showroom Offer Banner (1024x256 -> exact 4:1 match for 10.8x2.7 end gantry)
+  const showroomBanner = (() => {
+    const [c, ctx] = makeCanvas(1024, 256);
+    const grad = ctx.createLinearGradient(0, 0, 1024, 256);
+    grad.addColorStop(0, '#7f1d1d');
+    grad.addColorStop(0.5, '#b91c1c');
+    grad.addColorStop(1, '#111827');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 1024, 256);
+
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 10;
+    ctx.strokeRect(10, 10, 1004, 236);
+
+    // Left Hero badge
+    ctx.fillStyle = '#090d16';
+    ctx.fillRect(30, 34, 150, 188);
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(30, 34, 150, 188);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ef4444';
+    ctx.font = 'bold 46px "Chakra Petch", sans-serif';
+    ctx.fillText('HERO', 105, 106);
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 26px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('স্বাগতম', 105, 166);
+
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 54px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('নিলয় হিরো শোরুম ও আপগ্রেড', 595, 86);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 34px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('১,০০,০০০-এ এক্সট্রিম ১৬০আর  •  ২,০০,০০০-এ কারিজমা ২১০!', 595, 162);
+
+    ctx.fillStyle = '#4ade80';
+    ctx.font = 'bold 22px "Chakra Petch", sans-serif';
+    ctx.fillText('BIGGER SMASH  •  MORE FUEL  •  LONGER COMBO & NITRO', 595, 212);
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
+  // 5e. Roadside Niloy Hero Showroom Pylon Sign (384x768 -> 1:2 ratio)
+  const showroomPylonSign = (() => {
+    const [c, ctx] = makeCanvas(384, 768);
+    ctx.fillStyle = '#090d16';
+    ctx.fillRect(0, 0, 384, 768);
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 12;
+    ctx.strokeRect(10, 10, 364, 748);
+
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(28, 30, 328, 170);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 64px "Chakra Petch", sans-serif';
+    ctx.fillText('HERO', 192, 95);
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 30px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('নিলয় মোটরস লি.', 192, 162);
+
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 46px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('নিলয় হিরো', 192, 290);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 44px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('শোরুম', 192, 360);
+
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(36, 430, 312, 190);
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(36, 430, 312, 190);
+
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 30px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('বাইক আপগ্রেড', 192, 490);
+    ctx.fillStyle = '#4ade80';
+    ctx.font = 'bold 28px "Chakra Petch", sans-serif';
+    ctx.fillText('TIER 2: 100K', 192, 545);
+    ctx.fillStyle = '#facc15';
+    ctx.fillText('TIER 3: 200K', 192, 588);
+
+    ctx.fillStyle = '#4ade80';
+    ctx.font = 'bold 34px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('স্বাগতম বস!', 192, 692);
     return track(finalizeColorTexture(c, aniso));
   })();
 
@@ -482,6 +700,21 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
   const busShohag = track(
     makeLiveryTexture(aniso, '#047857', '#fde047', 'সোহাগ পরিবহন', 'SHOHAG ELITE • ঢাকা', '#ffffff')
   );
+  const doubleDeckerLivery = track(
+    makeLiveryTexture(aniso, '#b91c1c', '#facc15', 'বিআরটিসি ডাবল ডেকার', 'BRTC DOUBLE-DECKER • ঢাকা', '#fef08a')
+  );
+  const coveredVanLivery = track(
+    makeLiveryTexture(aniso, '#1e293b', '#38bdf8', 'নিলয় কার্গো কাভার্ড ভ্যান', 'NITOL-NILOY LOGISTICS • EXPRESS', '#f8fafc')
+  );
+  const cementMixerLivery = track(
+    makeLiveryTexture(aniso, '#065f46', '#fde047', 'নিটল রেডিমিক্স সিমেন্ট', 'NITOL CEMENT MIXER • ঢাকা', '#ffffff')
+  );
+  const oilTankerLivery = track(
+    makeLiveryTexture(aniso, '#c2410c', '#facc15', 'দাহ্য তেলের ট্যাংকার', 'DANGER • PETROL & OCTANE TANKER', '#ffffff')
+  );
+  const fireTruckLivery = track(
+    makeLiveryTexture(aniso, '#dc2626', '#f8fafc', 'ফায়ার সার্ভিস • ৯৯৯', 'BANGLADESH FIRE SERVICE & CD', '#fef08a')
+  );
   const policeLivery = track(
     makeLiveryTexture(aniso, '#1d4ed8', '#f8fafc', 'ডিএমপি পুলিশ • DMP', 'DHAKA METROPOLITAN POLICE', '#fef08a')
   );
@@ -600,7 +833,7 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     return track(finalizeColorTexture(c, aniso));
   })();
 
-  // 16. Hero Tank Livery
+  // 16. Hero Tank Liveries (Tier 1 Glamour, Tier 2 Xtreme 160R, Tier 3 Karizma XMR 210)
   const heroTank = (() => {
     const [c, ctx] = makeCanvas(256, 256);
     ctx.fillStyle = '#dc2626';
@@ -618,6 +851,44 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     ctx.fillStyle = '#fde047';
     ctx.font = 'bold 16px "Chakra Petch", sans-serif';
     ctx.fillText('NILOY MOTORS', 128, 148);
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
+  const heroTankXtreme = (() => {
+    const [c, ctx] = makeCanvas(256, 256);
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(0, 74, 256, 108);
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(0, 92, 256, 72);
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 30px "Chakra Petch", sans-serif';
+    ctx.fillText('XTREME 160R', 128, 118);
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 15px "Chakra Petch", sans-serif';
+    ctx.fillText('NILOY HERO · TIER 2', 128, 148);
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
+  const heroTankKarizma = (() => {
+    const [c, ctx] = makeCanvas(256, 256);
+    ctx.fillStyle = '#064e3b';
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(0, 72, 256, 112);
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 88, 256, 80);
+    ctx.fillStyle = '#34d399';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 28px "Chakra Petch", sans-serif';
+    ctx.fillText('KARIZMA 210', 128, 118);
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 15px "Chakra Petch", sans-serif';
+    ctx.fillText('RAJA TITAN · TIER 3', 128, 148);
     return track(finalizeColorTexture(c, aniso));
   })();
 
@@ -786,6 +1057,10 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     sidewalk: sidewalkTex,
     fuelPad: fuelPadTex,
     fuelCanopySign,
+    showroomPad,
+    showroomFacadeSign,
+    showroomBanner,
+    showroomPylonSign,
     metroBanner,
     metroStationBoards,
     escalatorSign,
@@ -799,6 +1074,11 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     busBrtc,
     busHanif,
     busShohag,
+    doubleDeckerLivery,
+    coveredVanLivery,
+    cementMixerLivery,
+    oilTankerLivery,
+    fireTruckLivery,
     policeLivery,
     rabLivery,
     armyLivery,
@@ -809,6 +1089,8 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     cngBacks,
     vangariBack,
     heroTank,
+    heroTankXtreme,
+    heroTankKarizma,
     buildingFacades,
     shopSigns,
     roadSigns,

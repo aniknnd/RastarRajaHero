@@ -15,11 +15,16 @@ import {
 } from './models';
 import { createProceduralTextures, type ProceduralTextureSet } from './textures';
 import {
+  BIKE_ORDER,
+  BIKE_SPECS,
   FUNNY_BENGALI_MESSAGES,
   FUNNY_DEATH_LINES_BN,
   GAME_CONFIG,
+  GAME_OVER_PUBLIC_ROASTS_BN,
   GameState,
   VEHICLE_SPECS,
+  type BikeSpec,
+  type BikeTierId,
   type EventPopup,
   type HudMission,
   type HudSnapshot,
@@ -32,6 +37,7 @@ import {
   type CityLane,
   type DhakaWorld,
   type FuelStationNode,
+  type ShowroomNode,
 } from './world';
 
 interface TrafficEntity {
@@ -160,16 +166,23 @@ function detectSoftwareWebGL(): boolean {
   }
 }
 
-function pickWeightedKind(isCity: boolean): VehicleKind {
+function pickWeightedKind(isCity: boolean, bikeTier: 1 | 2 | 3 = 1): VehicleKind {
   const entries = Object.entries(VEHICLE_SPECS) as [VehicleKind, (typeof VEHICLE_SPECS)[VehicleKind]][];
   let total = 0;
   for (const [, spec] of entries) {
-    total += isCity ? spec.cityWeight : spec.arteryWeight;
+    let w = isCity ? spec.cityWeight : spec.arteryWeight;
+    if (!isCity && bikeTier >= 2 && spec.smashRank >= 2) {
+      w *= bikeTier === 3 ? 1.55 : 1.3;
+    }
+    total += w;
   }
   let r = Math.random() * total;
   for (const [kind, spec] of entries) {
-    const w = isCity ? spec.cityWeight : spec.arteryWeight;
+    let w = isCity ? spec.cityWeight : spec.arteryWeight;
     if (w <= 0) continue;
+    if (!isCity && bikeTier >= 2 && spec.smashRank >= 2) {
+      w *= bikeTier === 3 ? 1.55 : 1.3;
+    }
     r -= w;
     if (r <= 0) return kind;
   }
@@ -243,9 +256,21 @@ export class HeroRastarEngine {
   private freeNitroTimer = 0;
 
   // Fuel & Hose
-  private fuelPercent = 100;
+  private fuelAmount = 100;
   private emptyStoppedTimer = 0;
   private refuelBonusGiven = false;
+
+  // Showroom & Bike Progression
+  private heroBankScore = 0;
+  private unlockedBikes: BikeTierId[] = ['glamour_125'];
+  private equippedBikeId: BikeTierId = 'glamour_125';
+  private showroomReturnState: GameState = GameState.MENU;
+  private showroomExitCooldown = 0;
+  private showroomVisitedLock = false;
+  private showroomSaluteLock = false;
+  private milestone100kShown = false;
+  private milestone200kShown = false;
+  private bankSaveAccum = 0;
 
   // Score, Combo, Pickups & Live Micro-Missions
   private score = 0;
@@ -284,6 +309,7 @@ export class HeroRastarEngine {
   // Crash & Scripted Slapper Sequence
   private gameOverReasonBn = '';
   private gameOverReasonEn = '';
+  private gameOverRoastsBn: string[] = [];
   private crashTimer = 0;
   private slapTriggered = false;
   private hitstopTimer = 0;
@@ -304,6 +330,12 @@ export class HeroRastarEngine {
     this.onHudUpdate = onHudUpdate;
     this.isSoftwareGl = detectSoftwareWebGL();
     this.bestScore = this.loadBestScore();
+    this.heroBankScore = this.loadHeroBank();
+    this.unlockedBikes = this.loadUnlockedBikes();
+    this.equippedBikeId = this.loadEquippedBike(this.unlockedBikes);
+    this.fuelAmount = BIKE_SPECS[this.equippedBikeId].fuelCapacity;
+    this.milestone100kShown = this.heroBankScore >= 100000 || this.unlockedBikes.includes('xtreme_160r');
+    this.milestone200kShown = this.heroBankScore >= 200000 || this.unlockedBikes.includes('karizma_210');
 
     this.renderer = new THREE.WebGLRenderer({
       antialias: !this.isSoftwareGl,
@@ -361,7 +393,7 @@ export class HeroRastarEngine {
     this.world = buildDhakaWorld(this.textures);
     this.scene.add(this.world.root);
 
-    this.heroRig = buildHeroMotorcycle(this.textures);
+    this.heroRig = buildHeroMotorcycle(this.textures, this.equippedBikeId);
     this.heroRig.group.position.set(this.playerX, 0, this.playerZ);
     this.scene.add(this.heroRig.group);
 
@@ -425,6 +457,128 @@ export class HeroRastarEngine {
     }
   }
 
+  private loadHeroBank(): number {
+    try {
+      const raw = localStorage.getItem(GAME_CONFIG.HERO_BANK_STORAGE_KEY);
+      const parsed = raw ? parseInt(raw, 10) : 0;
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  private saveHeroBank(value: number): void {
+    try {
+      localStorage.setItem(GAME_CONFIG.HERO_BANK_STORAGE_KEY, String(Math.max(0, Math.floor(value))));
+    } catch {
+      // Ignore
+    }
+  }
+
+  private loadUnlockedBikes(): BikeTierId[] {
+    try {
+      const raw = localStorage.getItem(GAME_CONFIG.UNLOCKED_BIKES_STORAGE_KEY);
+      if (!raw) return ['glamour_125'];
+      const arr = JSON.parse(raw) as unknown;
+      if (!Array.isArray(arr)) return ['glamour_125'];
+      const valid = arr.filter((id): id is BikeTierId => BIKE_ORDER.includes(id as BikeTierId));
+      if (!valid.includes('glamour_125')) valid.unshift('glamour_125');
+      return valid;
+    } catch {
+      return ['glamour_125'];
+    }
+  }
+
+  private saveUnlockedBikes(list: BikeTierId[]): void {
+    try {
+      localStorage.setItem(GAME_CONFIG.UNLOCKED_BIKES_STORAGE_KEY, JSON.stringify(list));
+    } catch {
+      // Ignore
+    }
+  }
+
+  private loadEquippedBike(unlocked: BikeTierId[]): BikeTierId {
+    try {
+      const raw = localStorage.getItem(GAME_CONFIG.EQUIPPED_BIKE_STORAGE_KEY) as BikeTierId | null;
+      if (raw && unlocked.includes(raw)) return raw;
+    } catch {
+      // Ignore
+    }
+    return 'glamour_125';
+  }
+
+  private saveEquippedBike(bikeId: BikeTierId): void {
+    try {
+      localStorage.setItem(GAME_CONFIG.EQUIPPED_BIKE_STORAGE_KEY, bikeId);
+    } catch {
+      // Ignore
+    }
+  }
+
+  private getActiveBikeSpec(): BikeSpec {
+    return BIKE_SPECS[this.equippedBikeId];
+  }
+
+  private getFuelPercent(): number {
+    const cap = this.getActiveBikeSpec().fuelCapacity;
+    return THREE.MathUtils.clamp((this.fuelAmount / cap) * 100, 0, 100);
+  }
+
+  private equipBikeModel(bikeId: BikeTierId): void {
+    if (this.heroRig.group.parent) {
+      this.scene.remove(this.heroRig.group);
+    }
+    this.heroRig.group.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.geometry.dispose();
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        for (const m of mats) m.dispose();
+      }
+    });
+
+    this.equippedBikeId = bikeId;
+    this.saveEquippedBike(bikeId);
+    this.heroRig = buildHeroMotorcycle(this.textures, bikeId);
+    this.heroRig.group.position.set(this.playerX, 0, this.playerZ);
+    this.heroRig.group.rotation.set(0, this.playerYaw, 0);
+    this.scene.add(this.heroRig.group);
+  }
+
+  private resetProgressionStorage(): void {
+    this.saveHeroBank(0);
+    this.saveUnlockedBikes(['glamour_125']);
+    this.saveEquippedBike('glamour_125');
+  }
+
+  private resetRunProgression(): void {
+    this.heroBankScore = 0;
+    this.unlockedBikes = ['glamour_125'];
+    this.milestone100kShown = false;
+    this.milestone200kShown = false;
+    this.resetProgressionStorage();
+    if (this.equippedBikeId !== 'glamour_125') {
+      this.equipBikeModel('glamour_125');
+    }
+  }
+
+  private addPoints(pts: number): void {
+    if (pts <= 0) return;
+    this.score += pts;
+    this.heroBankScore += pts;
+
+    if (!this.milestone100kShown && this.heroBankScore >= 100000 && !this.unlockedBikes.includes('xtreme_160r')) {
+      this.milestone100kShown = true;
+      this.audio.playTankFull();
+      this.flashScreen('amber', 0.3);
+      this.pushPopup('১০০,০০০ পয়েন্ট পূর্ণ!', 'নিলয় হিরো শোরুমে গিয়ে এক্সট্রিম ১৬০আর নিন!', 'bonus');
+    } else if (!this.milestone200kShown && this.heroBankScore >= 200000 && !this.unlockedBikes.includes('karizma_210')) {
+      this.milestone200kShown = true;
+      this.audio.playTankFull();
+      this.flashScreen('amber', 0.3);
+      this.pushPopup('২০০,০০০ পয়েন্ট পূর্ণ!', 'নিলয় হিরো শোরুমে গিয়ে কারিজমা ২১০ আনলক করুন!', 'bonus');
+    }
+  }
+
   private spawnTrafficSlot(entity: TrafficEntity, kind: VehicleKind, zPos: number, xPos: number, yaw: number): void {
     const spec = VEHICLE_SPECS[kind];
     entity.kind = kind;
@@ -455,7 +609,8 @@ export class HeroRastarEngine {
   }
 
   private initTrafficPools(): void {
-    // 1. Arterial Traffic across 4 keep-left lanes (seed iconic cycle, rickshaw, CNG & Nitol buses near start!)
+    // 1. Arterial Traffic across 4 keep-left lanes (seed iconic cycle, rickshaw, CNG, Nitol buses & new trucks!)
+    const tier = this.getActiveBikeSpec().tier;
     for (let i = 0; i < GAME_CONFIG.ARTERY_TRAFFIC_COUNT; i++) {
       const kind: VehicleKind =
         i === 0
@@ -468,7 +623,19 @@ export class HeroRastarEngine {
                 ? 'bus_nitol_staff'
                 : i === 4
                   ? 'bus_nitol'
-                  : pickWeightedKind(false);
+                  : i === 5
+                    ? 'covered_van'
+                    : i === 6
+                      ? 'bus_double_decker'
+                      : i === 7
+                        ? 'suv_prado'
+                        : i === 8
+                          ? 'cement_mixer'
+                          : i === 9
+                            ? 'oil_tanker'
+                            : i === 10
+                              ? 'fire_truck'
+                              : pickWeightedKind(false, tier);
       const laneIdx =
         i === 0 || i === 1
           ? 0
@@ -776,10 +943,13 @@ export class HeroRastarEngine {
     this.screenFlashTimer = duration;
   }
 
-  public startGame(): void {
+  public startGame(keepSelectedBike = false): void {
     this.audio.unlock();
     this.audio.resetRideAudio();
     this.audio.setMusicMode('play');
+    if (!keepSelectedBike) {
+      this.resetRunProgression();
+    }
     this.gameState = GameState.PLAYING;
     this.playerX = -3.25;
     this.playerZ = -18;
@@ -794,9 +964,13 @@ export class HeroRastarEngine {
     this.wasBoosting = false;
     this.freeNitroTimer = 0;
 
-    this.fuelPercent = 100;
+    this.fuelAmount = this.getActiveBikeSpec().fuelCapacity;
     this.emptyStoppedTimer = 0;
     this.refuelBonusGiven = false;
+    this.showroomExitCooldown = 0;
+    this.showroomVisitedLock = false;
+    this.showroomSaluteLock = false;
+    this.bankSaveAccum = 0;
     this.score = 0;
     this.isNewBest = false;
     this.combo = 1;
@@ -831,6 +1005,7 @@ export class HeroRastarEngine {
     this.cameraShake = 0;
     this.gameOverReasonBn = '';
     this.gameOverReasonEn = '';
+    this.gameOverRoastsBn = [];
 
     this.slapperRig.group.visible = false;
     this.fuelHoseGroup.visible = false;
@@ -938,6 +1113,91 @@ export class HeroRastarEngine {
     return next;
   }
 
+  public openShowroomFromMenu(): void {
+    this.audio.unlock();
+    this.audio.playShowroomOpen();
+    this.showroomReturnState = GameState.MENU;
+    this.gameState = GameState.SHOWROOM;
+    this.emitHud();
+  }
+
+  public closeShowroom(): void {
+    if (this.gameState !== GameState.SHOWROOM) return;
+    this.handleWindowBlur();
+    if (this.showroomReturnState === GameState.PLAYING) {
+      this.showroomVisitedLock = true;
+      this.showroomExitCooldown = 3.0;
+      this.forwardSpeed = Math.max(this.forwardSpeed, 8.5);
+      this.audio.setMusicMode('play');
+    }
+    this.gameState = this.showroomReturnState;
+    this.emitHud(false, false, false);
+  }
+
+  public purchaseOrEquipBike(bikeId: BikeTierId): { ok: boolean; message: string } {
+    this.audio.unlock();
+    const spec = BIKE_SPECS[bikeId];
+    const isOwned = this.unlockedBikes.includes(bikeId);
+
+    if (isOwned) {
+      this.equipBikeModel(bikeId);
+      this.fuelAmount = spec.fuelCapacity;
+      this.audio.playTankFull();
+      this.flashScreen('green', 0.2);
+
+      if (this.showroomReturnState === GameState.PLAYING) {
+        this.handleWindowBlur();
+        this.showroomVisitedLock = true;
+        this.showroomExitCooldown = 3.0;
+        this.forwardSpeed = Math.max(this.forwardSpeed, 9.5);
+        this.audio.setMusicMode('play');
+        this.gameState = GameState.PLAYING;
+        this.pushPopup('বাইক পরিবর্তন!', `${spec.nameBn} প্রস্তুত!`, 'bonus');
+        this.emitHud(false, false, false);
+      } else {
+        this.startGame(true);
+        this.pushPopup('বাইক পরিবর্তন!', `${spec.nameBn} নিয়ে যাত্রা শুরু!`, 'bonus');
+        this.emitHud(false, false, false);
+      }
+      return { ok: true, message: `${spec.nameBn} equipped` };
+    }
+
+    if (this.heroBankScore < spec.cost) {
+      this.audio.playViolation();
+      return {
+        ok: false,
+        message: `আরও ${(spec.cost - Math.floor(this.heroBankScore)).toLocaleString()} পয়েন্ট প্রয়োজন!`,
+      };
+    }
+
+    this.heroBankScore = Math.max(0, this.heroBankScore - spec.cost);
+    this.saveHeroBank(this.heroBankScore);
+    this.unlockedBikes = [...this.unlockedBikes, bikeId];
+    this.saveUnlockedBikes(this.unlockedBikes);
+    this.equipBikeModel(bikeId);
+    this.fuelAmount = spec.fuelCapacity;
+
+    this.audio.playUpgradeFanfare();
+    this.flashScreen('green', 0.35);
+    this.spawnBurst(this.playerX, 1.0, this.playerZ, 0xfacc15, 16);
+
+    if (this.showroomReturnState === GameState.PLAYING) {
+      this.handleWindowBlur();
+      this.showroomVisitedLock = true;
+      this.showroomExitCooldown = 3.0;
+      this.forwardSpeed = Math.max(this.forwardSpeed, 9.5);
+      this.audio.setMusicMode('play');
+      this.gameState = GameState.PLAYING;
+      this.pushPopup('নতুন বাইক আপগ্রেড!', `${spec.nameBn} আনলক হয়েছে (-${spec.cost.toLocaleString()} pts)!`, 'bonus');
+      this.emitHud(false, false, false);
+    } else {
+      this.startGame(true);
+      this.pushPopup('নতুন বাইক আপগ্রেড!', `${spec.nameBn} আনলক হয়েছে (-${spec.cost.toLocaleString()} pts)!`, 'bonus');
+      this.emitHud(false, false, false);
+    }
+    return { ok: true, message: `${spec.nameBn} unlocked!` };
+  }
+
   private syncCombinedInput(): void {
     this.input.accelerate = this.keyboardInput.accelerate || this.touchInput.accelerate;
     this.input.brake = this.keyboardInput.brake || this.touchInput.brake;
@@ -956,6 +1216,10 @@ export class HeroRastarEngine {
     if (e.repeat) return;
     this.audio.unlock();
 
+    if (e.code === 'Escape' && this.gameState === GameState.SHOWROOM) {
+      this.closeShowroom();
+      return;
+    }
     if (e.code === 'Enter' && this.gameState === GameState.MENU) {
       this.startGame();
       return;
@@ -1077,6 +1341,7 @@ export class HeroRastarEngine {
     this.fuelHoseGroup.visible = false;
     this.gameOverReasonBn = reasonBn;
     this.gameOverReasonEn = reasonEn;
+    this.gameOverRoastsBn = this.pickGameOverRoasts();
     this.audio.playBigCrash();
     this.flashScreen('red', 0.35);
     this.spawnBurst(this.playerX, 0.8, this.playerZ, 0xf97316, 20);
@@ -1098,15 +1363,27 @@ export class HeroRastarEngine {
     this.emitHud();
   }
 
+  private pickGameOverRoasts(): string[] {
+    const deathHeadline = FUNNY_DEATH_LINES_BN[Math.floor(Math.random() * FUNNY_DEATH_LINES_BN.length)];
+    const pool = [...GAME_OVER_PUBLIC_ROASTS_BN];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return [deathHeadline, ...pool.slice(0, 3)];
+  }
+
   private triggerOutOfFuel(): void {
     if (this.gameState !== GameState.PLAYING) return;
     this.gameState = GameState.GAME_OVER;
     this.fuelHoseGroup.visible = false;
     this.gameOverReasonBn = 'জ্বালানি শেষ! পাম্পের বাইরে তেল ফুরিয়ে আটকে গেছেন।';
     this.gameOverReasonEn = 'Out of fuel! Stop on Arterial or Downtown Fuel Pads to refill.';
+    this.gameOverRoastsBn = this.pickGameOverRoasts();
     this.audio.updateEngine(0, false, false);
     this.audio.playGameOver();
     this.finalizeBestScore();
+    this.resetProgressionStorage();
     this.emitHud();
   }
 
@@ -1134,7 +1411,12 @@ export class HeroRastarEngine {
     }
 
     this.cameraShake = Math.max(0, this.cameraShake - dt * 1.9);
-    this.world.updateAroundPlayer(this.playerZ, this.elapsedSec);
+    this.world.updateAroundPlayer(
+      this.playerZ,
+      this.elapsedSec,
+      this.playerX,
+      this.gameState === GameState.SHOWROOM
+    );
     this.updateTraffic(dt);
     this.updatePedestrians(dt);
     this.updateParticles(dt);
@@ -1212,6 +1494,7 @@ export class HeroRastarEngine {
 
       if (this.crashTimer <= 0) {
         this.gameState = GameState.GAME_OVER;
+        this.resetProgressionStorage();
         this.audio.playGameOver();
         this.emitHud();
       } else {
@@ -1224,15 +1507,38 @@ export class HeroRastarEngine {
       return;
     }
 
+    if (this.gameState === GameState.SHOWROOM) {
+      this.audio.updateEngine(0, false, false, this.getActiveBikeSpec().tier);
+      this.heroRig.group.position.set(this.playerX, 0, this.playerZ);
+      this.heroRig.group.rotation.set(0, this.playerYaw, 0);
+      this.heroRig.leanGroup.rotation.set(0, 0, 0);
+
+      const angle = this.elapsedSec * 0.55;
+      _camTarget.set(
+        this.playerX + Math.sin(angle) * 4.2,
+        1.95,
+        this.playerZ + Math.cos(angle) * 4.2
+      );
+      this.camera.position.lerp(_camTarget, 1 - Math.exp(-5 * dt));
+      _lookTarget.set(this.playerX, 0.85, this.playerZ);
+      this.camera.lookAt(_lookTarget);
+      this.sunLight.position.set(this.playerX + 28, 46, this.playerZ + 22);
+      this.sunLight.target.position.set(this.playerX, 0, this.playerZ - 12);
+      return;
+    }
+
     if (this.gameState === GameState.GAME_OVER) {
-      this.audio.updateEngine(0, false, false);
+      this.audio.updateEngine(0, false, false, this.getActiveBikeSpec().tier);
       return;
     }
 
     // === PLAYING STATE ===
+    const bikeSpec = this.getActiveBikeSpec();
     if (this.postHitRecoveryTimer > 0) this.postHitRecoveryTimer -= dt;
     if (this.freeNitroTimer > 0) this.freeNitroTimer = Math.max(0, this.freeNitroTimer - dt);
-    const hasFuel = this.fuelPercent > 0.05;
+    if (this.showroomExitCooldown > 0) this.showroomExitCooldown = Math.max(0, this.showroomExitCooldown - dt);
+
+    const hasFuel = this.fuelAmount > 0.05;
     const hasFreeNitro = this.freeNitroTimer > 0;
     const isBoosting = (this.input.boost && hasFuel && this.forwardSpeed > 4) || (hasFreeNitro && this.forwardSpeed > 2);
     if (isBoosting && !this.wasBoosting) {
@@ -1240,18 +1546,15 @@ export class HeroRastarEngine {
     }
     this.wasBoosting = isBoosting;
 
-    // 1. Longitudinal Speed Drive Model (PlayerCar)
+    // 1. Longitudinal Speed Drive Model (Scaled by Hero Bike Tier)
     const maxFwdMps =
       !hasFuel && !hasFreeNitro
         ? GAME_CONFIG.MAX_SPEED_EMPTY_MPS
         : isBoosting
-          ? GAME_CONFIG.MAX_SPEED_BOOST_MPS
-          : GAME_CONFIG.MAX_SPEED_NORMAL_MPS;
+          ? bikeSpec.maxBoostMps
+          : bikeSpec.maxNormalMps;
     const maxRevMps = -GAME_CONFIG.MAX_REVERSE_MPS;
 
-    // Touch BRAKE button was removed; REV is the only way to go backward.
-    // Reverse works even when the tank is empty (coast/roll back) so the
-    // button always has an effect instead of doing nothing on low fuel.
     const brakingWithTouchBrake = this.input.brake && this.forwardSpeed > 2.5;
     const reversingWithTouchBrake = this.input.brake && this.forwardSpeed <= 2.5;
 
@@ -1261,22 +1564,22 @@ export class HeroRastarEngine {
       if (Math.abs(this.forwardSpeed) <= 0.5) this.forwardSpeed = 0;
     } else if (this.input.reverse || reversingWithTouchBrake) {
       if (this.forwardSpeed > 1.2) {
-        accel = -26; // crisp braking first
+        accel = -26;
       } else {
-        accel = -11; // reverse
+        accel = -11;
       }
     } else if (this.input.accelerate || hasFreeNitro) {
-      accel = isBoosting ? 24 : hasFuel ? 14.5 : 6.0;
+      accel = (isBoosting ? 24 : hasFuel ? 14.5 : 6.0) * bikeSpec.accelMult;
     } else {
       accel = -Math.sign(this.forwardSpeed) * 4.5;
       if (Math.abs(this.forwardSpeed) < 0.35) this.forwardSpeed = 0;
     }
 
     this.forwardSpeed = THREE.MathUtils.clamp(this.forwardSpeed + accel * dt, maxRevMps, maxFwdMps);
-    if (!isBoosting && this.forwardSpeed > (hasFuel ? GAME_CONFIG.MAX_SPEED_NORMAL_MPS : GAME_CONFIG.MAX_SPEED_EMPTY_MPS)) {
+    if (!isBoosting && this.forwardSpeed > (hasFuel ? bikeSpec.maxNormalMps : GAME_CONFIG.MAX_SPEED_EMPTY_MPS)) {
       this.forwardSpeed = THREE.MathUtils.damp(
         this.forwardSpeed,
-        hasFuel ? GAME_CONFIG.MAX_SPEED_NORMAL_MPS : GAME_CONFIG.MAX_SPEED_EMPTY_MPS,
+        hasFuel ? bikeSpec.maxNormalMps : GAME_CONFIG.MAX_SPEED_EMPTY_MPS,
         2.6,
         dt
       );
@@ -1288,7 +1591,7 @@ export class HeroRastarEngine {
     this.smoothedSteer = THREE.MathUtils.damp(this.smoothedSteer, rawSteer, steerRate, dt);
 
     const absSpeed = Math.abs(this.forwardSpeed);
-    const speedNorm = THREE.MathUtils.clamp(absSpeed / GAME_CONFIG.MAX_SPEED_BOOST_MPS, 0, 1);
+    const speedNorm = THREE.MathUtils.clamp(absSpeed / bikeSpec.maxBoostMps, 0, 1);
     const turnAuthority = THREE.MathUtils.lerp(2.25, 0.72, speedNorm) * (absSpeed < 1.0 ? 0.35 : 1.0);
     const reverseFlip = this.forwardSpeed < -0.5 ? -1 : 1;
     this.playerYaw += this.smoothedSteer * turnAuthority * reverseFlip * dt;
@@ -1317,14 +1620,21 @@ export class HeroRastarEngine {
     if (this.forwardSpeed > 0) {
       const distDelta = this.forwardSpeed * dt;
       this.distanceMeters += distDelta;
-      this.score += distDelta * (0.4 + speedNorm * 0.9) * (isBoosting ? 1.35 : 1) * (this.combo >= 5 ? 1.25 : 1);
+      this.addPoints(distDelta * (0.4 + speedNorm * 0.9) * (isBoosting ? 1.35 : 1) * (this.combo >= 5 ? 1.25 : 1));
     }
 
-    // 5. Fuel ("তেল / জ্বালানি") + Animated Pump Hose
+    // Periodically persist Hero Bank to localStorage
+    this.bankSaveAccum += dt;
+    if (this.bankSaveAccum >= 1.5) {
+      this.bankSaveAccum = 0;
+      this.saveHeroBank(this.heroBankScore);
+    }
+
+    // 5. Fuel ("তেল / জ্বালানি") + Animated Pump Hose (Scaled by Hero Bike Fuel Capacity & Economy)
     const speedKmh = Math.round(absSpeed * GAME_CONFIG.SPEED_KMH_FACTOR);
     if (absSpeed > 1.2 && hasFuel && !hasFreeNitro) {
-      const burnRate = (0.4 + (speedKmh / 100) * 2.1) * (this.input.boost ? 2.15 : 1.0);
-      this.fuelPercent = Math.max(0, this.fuelPercent - burnRate * dt);
+      const burnRate = (0.4 + (speedKmh / 100) * 2.1) * (this.input.boost ? 2.15 : 1.0) * bikeSpec.fuelBurnMult;
+      this.fuelAmount = Math.max(0, this.fuelAmount - burnRate * dt);
     }
 
     if (speedKmh >= 130 && this.getCurrentMission().kind === 'highSpeed') {
@@ -1340,18 +1650,23 @@ export class HeroRastarEngine {
     const activeStation = this.getActiveFuelStation();
     const inFuelZone = activeStation !== null;
     let isRefueling = false;
+    const fuelPct = this.getFuelPercent();
 
-    if (activeStation && speedKmh <= GAME_CONFIG.FUEL_REFILL_MAX_SPEED_KMH && this.fuelPercent < 99.9) {
+    if (activeStation && speedKmh <= GAME_CONFIG.FUEL_REFILL_MAX_SPEED_KMH && fuelPct < 99.9) {
       isRefueling = true;
-      this.fuelPercent = Math.min(100, this.fuelPercent + GAME_CONFIG.FUEL_REFILL_RATE_PER_SEC * dt);
-      this.audio.playRefuelTick(this.fuelPercent);
+      const capScale = bikeSpec.fuelCapacity / 100;
+      this.fuelAmount = Math.min(
+        bikeSpec.fuelCapacity,
+        this.fuelAmount + GAME_CONFIG.FUEL_REFILL_RATE_PER_SEC * capScale * dt
+      );
+      this.audio.playRefuelTick(this.getFuelPercent());
       this.updateFuelHose(activeStation);
-      if (this.fuelPercent >= 99.5 && !this.refuelBonusGiven) {
+      if (this.getFuelPercent() >= 99.5 && !this.refuelBonusGiven) {
         this.refuelBonusGiven = true;
-        this.score += 100;
+        this.addPoints(100);
         this.audio.playTankFull();
         this.flashScreen('green', 0.25);
-        this.pushPopup('ট্যাংক ফুল!', 'তেল ১০০% • +100 pts', 'refuel');
+        this.pushPopup('ট্যাংক ফুল!', `তেল ${bikeSpec.fuelCapacity}L ১০০% • +100 pts`, 'refuel');
       }
     } else {
       this.fuelHoseGroup.visible = false;
@@ -1359,7 +1674,7 @@ export class HeroRastarEngine {
     }
 
     // Empty tank + stopped off-station for ~4s => "জ্বালানি শেষ!" Game Over
-    if (this.fuelPercent <= 0 && !inFuelZone && speedKmh < 4) {
+    if (this.fuelAmount <= 0 && !inFuelZone && speedKmh < 4) {
       this.emptyStoppedTimer += dt;
       if (this.emptyStoppedTimer >= GAME_CONFIG.EMPTY_STOPPED_GAMEOVER_SEC) {
         this.triggerOutOfFuel();
@@ -1367,6 +1682,31 @@ export class HeroRastarEngine {
       }
     } else {
       this.emptyStoppedTimer = 0;
+    }
+
+    // 5b. Niloy Hero Showroom Pad Entry (ride onto showroom pad & slow <= 25 km/h; once per visit)
+    const activeShowroom = this.getActiveShowroom();
+    if (!activeShowroom) {
+      this.showroomVisitedLock = false;
+      this.showroomSaluteLock = false;
+    } else if (!this.showroomSaluteLock) {
+      this.showroomSaluteLock = true;
+      this.pushPopup('স্যালুট বস! শোরুমে স্বাগতম!', 'নিলয় হিরো টিম আপনাকে স্বাগত জানাচ্ছে!', 'bonus');
+    }
+    const showShowroomBanner =
+      activeShowroom !== null && !this.showroomVisitedLock && this.showroomExitCooldown <= 0;
+    if (showShowroomBanner && speedKmh <= GAME_CONFIG.SHOWROOM_MAX_SPEED_KMH) {
+      this.saveHeroBank(this.heroBankScore);
+      this.forwardSpeed = 0;
+      this.lateralSlip = 0;
+      this.handleWindowBlur();
+      this.showroomVisitedLock = true;
+      this.showroomReturnState = GameState.PLAYING;
+      this.gameState = GameState.SHOWROOM;
+      this.audio.updateEngine(0, false, false, bikeSpec.tier);
+      this.audio.playShowroomOpen();
+      this.emitHud(false, inFuelZone, false);
+      return;
     }
 
     // 6. Violations: Wrong-Way (+15/s) & Sidewalk Driving (+10/s)
@@ -1454,7 +1794,7 @@ export class HeroRastarEngine {
       if (absSpeed > 4) this.audio.playHorn(0.65 + Math.random() * 0.55, true);
     }
 
-    this.audio.updateEngine(speedKmh, isBoosting, true);
+    this.audio.updateEngine(speedKmh, isBoosting, true, bikeSpec.tier);
 
     if (Math.floor(this.score) > this.bestScore) {
       this.bestScore = Math.floor(this.score);
@@ -1468,7 +1808,7 @@ export class HeroRastarEngine {
     this.hudEmitAccumulator += dt;
     if (this.hudEmitAccumulator >= 0.05 || isRefueling) {
       this.hudEmitAccumulator = 0;
-      this.emitHud(isRefueling, inFuelZone);
+      this.emitHud(isRefueling, inFuelZone, showShowroomBanner);
     }
   }
 
@@ -1544,7 +1884,7 @@ export class HeroRastarEngine {
 
     if (offsetZ > 0) {
       this.lapCount += 1;
-      this.score += 250;
+      this.addPoints(250);
       this.pushPopup(`ল্যাপ ${this.lapCount} বোনাস!`, '+250 District Bonus', 'bonus');
       this.audio.playDing(this.combo);
     }
@@ -1624,7 +1964,7 @@ export class HeroRastarEngine {
     if (this.violationPenaltyAccum >= 1) {
       const reward = Math.floor(this.violationPenaltyAccum);
       this.violationPenaltyAccum -= reward;
-      this.score += reward;
+      this.addPoints(reward);
     }
 
     if (this.ruleBreakSecondAccum >= 2.5) {
@@ -1645,9 +1985,10 @@ export class HeroRastarEngine {
     this.missionProgress += amount;
     if (this.missionProgress >= m.target) {
       const bonus = m.reward + this.missionLoop * 150;
-      this.score += bonus;
+      const bikeSpec = this.getActiveBikeSpec();
+      this.addPoints(bonus);
       this.combo = Math.min(10, this.combo + 1);
-      this.comboTimer = 4.8;
+      this.comboTimer = Math.max(this.comboTimer, bikeSpec.comboHoldSec);
       this.audio.playTankFull();
       this.flashScreen('green', 0.22);
       this.pushPopup('মিশন সম্পন্ন!', `${m.titleBn} • +${bonus} pts!`, 'bonus');
@@ -1662,6 +2003,7 @@ export class HeroRastarEngine {
   }
 
   private updatePickups(dt: number): void {
+    const bikeSpec = this.getActiveBikeSpec();
     for (const pk of this.pickups) {
       if (pk.respawnTimer > 0) {
         pk.respawnTimer -= dt;
@@ -1688,23 +2030,24 @@ export class HeroRastarEngine {
         if (pk.kind === 'coin') {
           const feverMult = this.combo >= 5 ? 2 : 1;
           const pts = 150 * this.combo * feverMult;
-          this.score += pts;
-          this.comboTimer = Math.max(this.comboTimer, 4.0);
+          this.addPoints(pts);
+          this.comboTimer = Math.max(this.comboTimer, bikeSpec.comboHoldSec);
           this.audio.playDing(this.combo);
           this.spawnBurst(pk.x, 1.0, this.playerZ + relZ, 0xfacc15, 10);
           this.pushPopup('৳ টাকা কয়েন!', `+${pts} pts${feverMult > 1 ? ' (FEVER 2x!)' : ''}`, 'bonus');
         } else if (pk.kind === 'fuel') {
-          this.fuelPercent = Math.min(100, this.fuelPercent + 18);
+          const fuelGain = bikeSpec.fuelCapacity * 0.18;
+          this.fuelAmount = Math.min(bikeSpec.fuelCapacity, this.fuelAmount + fuelGain);
           this.audio.playTankFull();
           this.flashScreen('green', 0.18);
           this.spawnBurst(pk.x, 1.0, this.playerZ + relZ, 0x22c55e, 10);
-          this.pushPopup('পেট্রোল ক্যান!', '+18% তেল (Petrol)', 'refuel');
+          this.pushPopup('পেট্রোল ক্যান!', `+${Math.round(fuelGain)}L তেল (+18%)`, 'refuel');
         } else {
-          this.freeNitroTimer = 2.6;
+          this.freeNitroTimer = bikeSpec.nitroDurationSec;
           this.audio.playWhoosh();
           this.flashScreen('amber', 0.16);
           this.spawnBurst(pk.x, 1.0, this.playerZ + relZ, 0x38bdf8, 12);
-          this.pushPopup('নাইট্রো চার্জ!', 'ফ্রি টার্বো বুস্ট (২.৬ সে.)', 'bonus');
+          this.pushPopup('নাইট্রো চার্জ!', `ফ্রি টার্বো বুস্ট (${bikeSpec.nitroDurationSec.toFixed(1)} সে.)`, 'bonus');
         }
       }
     }
@@ -1877,8 +2220,9 @@ export class HeroRastarEngine {
   }
 
   private recycleVehicle(t: TrafficEntity): void {
+    const tier = this.getActiveBikeSpec().tier;
     if (!t.isCityVehicle) {
-      const kind = pickWeightedKind(false);
+      const kind = pickWeightedKind(false, tier);
       const laneIdx = pickArteryLaneForKind(kind);
       const laneX = GAME_CONFIG.ARTERY_LANES[laneIdx];
       const yaw = laneX > 0 ? Math.PI : 0;
@@ -1902,7 +2246,7 @@ export class HeroRastarEngine {
       const lane = this.world.cityLanes[laneIdx];
       const pt = this.sampleCityLanePoint(lane, Math.random());
       t.laneIdx = laneIdx;
-      this.spawnTrafficSlot(t, pickWeightedKind(true), pt.z, pt.x, pt.yaw);
+      this.spawnTrafficSlot(t, pickWeightedKind(true, tier), pt.z, pt.x, pt.yaw);
       t.baseSpeed = Math.min(t.baseSpeed, 10.5);
       t.currentSpeed = t.baseSpeed;
     }
@@ -2013,6 +2357,7 @@ export class HeroRastarEngine {
   private checkTrafficCollisions(speedKmh: number, isBoosting: boolean): void {
     const bikeHalfW = 0.32;
     const bikeHalfL = 0.65;
+    const bikeSpec = this.getActiveBikeSpec();
 
     for (const t of this.traffic) {
       if (t.wrecked || t.hitCooldown > 0) continue;
@@ -2027,16 +2372,24 @@ export class HeroRastarEngine {
 
       if (dx < bikeHalfW + tHalfW && dz < bikeHalfL + tHalfL) {
         t.hitCooldown = 0.45;
+        const canSmash = bikeSpec.tier >= spec.smashRank;
 
-        if (spec.tier === 'large') {
+        if (!canSmash) {
           if (Math.abs(this.forwardSpeed) > 11) {
+            const upgradeHintBn =
+              spec.smashRank === 2
+                ? 'এটি ভাঙতে ১০০,০০০ পয়েন্টে এক্সট্রিম ১৬০আর নিন!'
+                : 'এটি ভাঙতে ২০০,০০০ পয়েন্টে কারিজমা ২১০ নিন!';
+            const upgradeHintEn =
+              spec.smashRank === 2
+                ? 'Upgrade to Hero Xtreme 160R (100,000 pts) to smash it!'
+                : 'Upgrade to Hero Karizma 210 (200,000 pts) to smash Titans!';
             this.triggerBigCrash(
-              `${spec.nameBn}-এর সাথে ভয়াবহ ধাক্কা!`,
-              `Catastrophic crash with ${spec.nameEn}!`
+              `${spec.nameBn}-এর সাথে ধাক্কা! ${upgradeHintBn}`,
+              `Crashed with ${spec.nameEn}! ${upgradeHintEn}`
             );
             return;
           } else {
-            // Lighter contact deflects without crashing
             this.forwardSpeed = -Math.sign(this.forwardSpeed || 1) * 3.5;
             this.lateralSlip = 0;
             this.playerX += this.playerX < t.x ? -0.75 : 0.75;
@@ -2044,34 +2397,41 @@ export class HeroRastarEngine {
             this.audio.playThud();
           }
         } else {
-          // Small / Medium vehicle smashed! Smash-through momentum keeps Hero roaring forward!
+          // Smashable vehicle (scales with equipped Hero Bike tier!)
           if (Math.abs(this.forwardSpeed) > 4.5 || isBoosting) {
             t.wrecked = true;
             t.wreckTimer = 0.35;
             t.rig.group.position.y = -2.5;
 
             this.wrecksCount += 1;
-            this.advanceMission('smash', 1);
+            this.advanceMission('smash', spec.smashRank >= 2 ? 2 : 1);
             const feverMult = this.combo >= 5 ? 1.5 : 1;
             const pts = Math.round(spec.scoreValue * this.combo * feverMult);
-            this.score += pts;
+            this.addPoints(pts);
             this.combo = Math.min(10, this.combo + 1);
-            this.comboTimer = 4.5;
+            this.comboTimer = bikeSpec.comboHoldSec;
 
             // Preserve roaring speed through wreckage!
-            this.forwardSpeed = Math.max(7, this.forwardSpeed * 0.88);
+            this.forwardSpeed = Math.max(8, this.forwardSpeed * 0.9);
             this.lateralSlip = 0;
             this.postHitRecoveryTimer = 0.65;
-            this.cameraShake = 0.44;
+            this.cameraShake = spec.smashRank >= 2 ? 0.62 : 0.44;
 
             this.audio.playSmash();
             if (this.wrecksCount % 3 === 2) {
               this.audio.playAccidentAnnouncement();
             }
             this.flashScreen('amber', 0.16);
-            this.spawnBurst(t.x, 0.7, t.z, 0xf97316, 14);
-            this.spawnDebrisBurst(t.x, 0.5, t.z, 6);
-            this.pushPopup(`${spec.nameBn} চুরমার!`, `+${pts} pts • x${this.combo}`, 'bonus');
+            this.spawnBurst(t.x, 0.7, t.z, 0xf97316, spec.smashRank >= 2 ? 20 : 14);
+            this.spawnDebrisBurst(t.x, 0.5, t.z, spec.smashRank >= 2 ? 10 : 6);
+
+            if (t.kind === 'oil_tanker') {
+              const tankBoost = bikeSpec.fuelCapacity * 0.2;
+              this.fuelAmount = Math.min(bikeSpec.fuelCapacity, this.fuelAmount + tankBoost);
+              this.pushPopup(`${spec.nameBn} চুরমার!`, `+${pts} pts • +20% তেল রিফিল!`, 'refuel');
+            } else {
+              this.pushPopup(`${spec.nameBn} চুরমার!`, `+${pts} pts • x${this.combo}`, 'bonus');
+            }
             this.angerNearbyWitnesses(t.x, t.z);
           } else {
             this.forwardSpeed *= 0.45;
@@ -2090,9 +2450,9 @@ export class HeroRastarEngine {
         this.nearMissCount += 1;
         this.advanceMission('nearMiss', 1);
         this.combo = Math.min(10, this.combo + 1);
-        this.comboTimer = 4.5;
+        this.comboTimer = bikeSpec.comboHoldSec;
         const pts = 60 * this.combo;
-        this.score += pts;
+        this.addPoints(pts);
         this.audio.playDing(this.combo);
         this.pushPopup('কাছাকাছি কাট!', `NEAR MISS +${pts} • x${this.combo}`, 'bonus');
       }
@@ -2102,6 +2462,7 @@ export class HeroRastarEngine {
   private checkPedestrianInteractions(isBoosting: boolean): void {
     const absSpd = Math.abs(this.forwardSpeed);
     const isMovingFastEnoughToRam = absSpd > 3.8 || isBoosting;
+    const bikeSpec = this.getActiveBikeSpec();
 
     for (const p of this.pedestrians) {
       if (p.mode === 'knocked') continue;
@@ -2132,9 +2493,9 @@ export class HeroRastarEngine {
 
           this.pedKnockCount += 1;
           const pts = (wasChasing ? 140 : 80) * this.combo;
-          this.score += pts;
+          this.addPoints(pts);
           this.combo = Math.min(10, this.combo + 1);
-          this.comboTimer = 4.5;
+          this.comboTimer = bikeSpec.comboHoldSec;
           this.audio.playPedHit();
           this.flashScreen('red', 0.14);
           this.spawnBurst(p.x, 0.9, this.playerZ, 0xef4444, 8);
@@ -2150,6 +2511,7 @@ export class HeroRastarEngine {
   }
 
   private checkIntersections(speedKmh: number): void {
+    const bikeSpec = this.getActiveBikeSpec();
     for (const inter of this.world.intersections) {
       const relZ = wrapLoopDelta(inter.baseZ, this.playerZ);
       if (Math.abs(relZ) > 30) {
@@ -2164,9 +2526,9 @@ export class HeroRastarEngine {
           this.ruleBreakCount += 1;
           this.advanceMission('ruleBreak', 1);
           this.combo = Math.min(10, this.combo + 1);
-          this.comboTimer = 4.5;
+          this.comboTimer = bikeSpec.comboHoldSec;
           const pts = 200 * this.combo;
-          this.score += pts;
+          this.addPoints(pts);
           this.activeViolation = `লাল বাতি ভঙ্গ! (+${pts} নিয়ম ভঙ্গ বোনাস!)`;
           this.violationTimer = 2.6;
           this.audio.playViolation();
@@ -2176,7 +2538,7 @@ export class HeroRastarEngine {
           this.angerNearbyWitnesses(this.playerX, this.playerZ);
         } else if (inter.nsPhase === 'GREEN' && !inter.bonusAwardedThisPass && speedKmh > 35) {
           inter.bonusAwardedThisPass = true;
-          this.score += 100;
+          this.addPoints(100);
           this.audio.playDing(this.combo);
           this.pushPopup('সবুজ সংকেত বোনাস!', '+100 pts', 'bonus');
         }
@@ -2200,6 +2562,28 @@ export class HeroRastarEngine {
     for (const fs of this.world.fuelStations) {
       const dx = this.playerX - (fs.padMinX + fs.padMaxX) * 0.5;
       const dz = wrapLoopDelta(fs.baseZ, this.playerZ);
+      const d = Math.hypot(dx, dz);
+      if (d < best) best = d;
+    }
+    return Math.round(best);
+  }
+
+  private getActiveShowroom(): ShowroomNode | null {
+    for (const sr of this.world.showrooms) {
+      if (this.playerX >= sr.padMinX && this.playerX <= sr.padMaxX) {
+        if (Math.abs(wrapLoopDelta(sr.baseZ, this.playerZ)) <= GAME_CONFIG.SHOWROOM_PAD_HALF_LENGTH) {
+          return sr;
+        }
+      }
+    }
+    return null;
+  }
+
+  private getNearestShowroomMeters(): number {
+    let best = 9999;
+    for (const sr of this.world.showrooms) {
+      const dx = this.playerX - (sr.padMinX + sr.padMaxX) * 0.5;
+      const dz = wrapLoopDelta(sr.baseZ, this.playerZ);
       const d = Math.hypot(dx, dz);
       if (d < best) best = d;
     }
@@ -2290,8 +2674,9 @@ export class HeroRastarEngine {
   }
 
   private updateChaseCamera(dt: number, isBoosting = false): void {
+    const bikeSpec = this.getActiveBikeSpec();
     const absSpeed = Math.abs(this.forwardSpeed);
-    const speedNorm = THREE.MathUtils.clamp(absSpeed / GAME_CONFIG.MAX_SPEED_BOOST_MPS, 0, 1);
+    const speedNorm = THREE.MathUtils.clamp(absSpeed / bikeSpec.maxBoostMps, 0, 1);
 
     const desiredFov = 58 + speedNorm * 13 + (isBoosting ? 5 : 0);
     this.camera.fov = THREE.MathUtils.damp(this.camera.fov, desiredFov, 6, dt);
@@ -2342,10 +2727,18 @@ export class HeroRastarEngine {
     return 'পাড়ার নতুন বাইকার';
   }
 
-  private emitHud(isRefueling = false, isInFuelZone = false): void {
+  private getNextUnlockBikeId(): BikeTierId | null {
+    for (const id of BIKE_ORDER) {
+      if (!this.unlockedBikes.includes(id)) return id;
+    }
+    return null;
+  }
+
+  private emitHud(isRefueling = false, isInFuelZone = false, isInShowroomZone = false): void {
+    const bikeSpec = this.getActiveBikeSpec();
     const light = this.getUpcomingLight();
     const speedKmh = Math.round(Math.abs(this.forwardSpeed) * GAME_CONFIG.SPEED_KMH_FACTOR);
-    const maxDisplayKmh = Math.round(GAME_CONFIG.MAX_SPEED_BOOST_MPS * GAME_CONFIG.SPEED_KMH_FACTOR);
+    const maxDisplayKmh = Math.round(bikeSpec.maxBoostMps * GAME_CONFIG.SPEED_KMH_FACTOR);
     let angryMobCount = 0;
     for (const p of this.pedestrians) {
       if (p.mode === 'chasing') angryMobCount += 1;
@@ -2363,16 +2756,24 @@ export class HeroRastarEngine {
     this.onHudUpdate({
       gameState: this.gameState,
       score: scoreInt,
+      bankScore: Math.floor(this.heroBankScore),
       bestScore: Math.max(this.bestScore, scoreInt),
       isNewBest: this.isNewBest,
+      equippedBikeId: this.equippedBikeId,
+      unlockedBikes: [...this.unlockedBikes],
       speedKmh,
       speedNorm: THREE.MathUtils.clamp(speedKmh / maxDisplayKmh, 0, 1),
-      fuelPercent: Math.round(this.fuelPercent),
+      fuelPercent: Math.round(this.getFuelPercent()),
+      fuelAmount: Math.round(this.fuelAmount),
+      fuelCapacity: bikeSpec.fuelCapacity,
       isRefueling,
       isInFuelZone,
       nearestPumpMeters: this.getNearestFuelStationMeters(),
+      isInShowroomZone,
+      nearestShowroomMeters: this.getNearestShowroomMeters(),
+      nextUnlockBikeId: this.getNextUnlockBikeId(),
       combo: this.combo,
-      comboTimerNorm: THREE.MathUtils.clamp(this.comboTimer / 4.5, 0, 1),
+      comboTimerNorm: THREE.MathUtils.clamp(this.comboTimer / bikeSpec.comboHoldSec, 0, 1),
       feverActive: this.combo >= 5,
       distanceMeters: Math.round(this.distanceMeters),
       wrecksCount: this.wrecksCount,
@@ -2389,6 +2790,7 @@ export class HeroRastarEngine {
       screenFlashTone: this.screenFlashTone,
       gameOverReasonBn: this.gameOverReasonBn,
       gameOverReasonEn: this.gameOverReasonEn,
+      gameOverRoastsBn: this.gameOverRoastsBn,
       lapCount: this.lapCount,
       zoneLabelBn: this.getDhakaZoneLabel(),
       upcomingLight: light.phase,

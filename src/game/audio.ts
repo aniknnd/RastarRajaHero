@@ -219,7 +219,7 @@ export class GameAudio {
     return this.muted;
   }
 
-  public updateEngine(speedKmh: number, isBoosting: boolean, active: boolean): void {
+  public updateEngine(speedKmh: number, isBoosting: boolean, active: boolean, tier: 1 | 2 | 3 = 1): void {
     if (!this.ctx || !this.engineOsc || !this.engineSubOsc || !this.engineFilter || !this.engineGain) {
       return;
     }
@@ -230,13 +230,14 @@ export class GameAudio {
     }
 
     const absSpeed = Math.abs(speedKmh);
-    const norm = Math.min(absSpeed / 160, 1);
-    const baseFreq = 42 + norm * 124 + (isBoosting ? 26 : 0);
-    const cutoff = 210 + norm * 920 + (isBoosting ? 460 : 0);
+    const norm = Math.min(absSpeed / 180, 1);
+    const tierShift = tier === 3 ? 1.24 : tier === 2 ? 1.12 : 1.0;
+    const baseFreq = (42 + norm * 124 + (isBoosting ? 26 : 0)) * tierShift;
+    const cutoff = (210 + norm * 920 + (isBoosting ? 460 : 0)) * tierShift;
     const gain = 0.07 + norm * 0.12 + (isBoosting ? 0.05 : 0);
 
     this.engineOsc.frequency.setTargetAtTime(baseFreq, now, 0.05);
-    this.engineSubOsc.frequency.setTargetAtTime(baseFreq * 1.98, now, 0.05);
+    this.engineSubOsc.frequency.setTargetAtTime(baseFreq * (tier === 3 ? 1.5 : 1.98), now, 0.05);
     this.engineFilter.frequency.setTargetAtTime(cutoff, now, 0.05);
     this.engineGain.gain.setTargetAtTime(gain, now, 0.06);
   }
@@ -586,6 +587,48 @@ export class GameAudio {
         g.connect(this.masterGain!);
         o.start(now + idx * 0.07);
         o.stop(now + idx * 0.07 + 0.19);
+      });
+    } catch {
+      // Ignore
+    }
+  }
+
+  public playShowroomOpen(): void {
+    if (!this.ctx || !this.masterGain || this.muted) return;
+    try {
+      const now = this.ctx.currentTime;
+      [587.33, 880].forEach((freq, idx) => {
+        const o = this.ctx!.createOscillator();
+        const g = this.ctx!.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(freq, now + idx * 0.09);
+        g.gain.setValueAtTime(0.16, now + idx * 0.09);
+        g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + 0.25);
+        o.connect(g);
+        g.connect(this.masterGain!);
+        o.start(now + idx * 0.09);
+        o.stop(now + idx * 0.09 + 0.26);
+      });
+    } catch {
+      // Ignore
+    }
+  }
+
+  public playUpgradeFanfare(): void {
+    if (!this.ctx || !this.masterGain || this.muted) return;
+    try {
+      const now = this.ctx.currentTime;
+      [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+        const o = this.ctx!.createOscillator();
+        const g = this.ctx!.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(freq, now + idx * 0.08);
+        g.gain.setValueAtTime(0.22, now + idx * 0.08);
+        g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.34);
+        o.connect(g);
+        g.connect(this.masterGain!);
+        o.start(now + idx * 0.08);
+        o.stop(now + idx * 0.08 + 0.36);
       });
     } catch {
       // Ignore
