@@ -259,6 +259,7 @@ export class HeroRastarEngine {
   private fuelAmount = 100;
   private emptyStoppedTimer = 0;
   private refuelBonusGiven = false;
+  private refuelSafeGraceTimer = 0;
 
   // Showroom & Bike Progression
   private heroBankScore = 0;
@@ -967,6 +968,7 @@ export class HeroRastarEngine {
     this.fuelAmount = this.getActiveBikeSpec().fuelCapacity;
     this.emptyStoppedTimer = 0;
     this.refuelBonusGiven = false;
+    this.refuelSafeGraceTimer = 0;
     this.showroomExitCooldown = 0;
     this.showroomVisitedLock = false;
     this.showroomSaluteLock = false;
@@ -1654,6 +1656,7 @@ export class HeroRastarEngine {
 
     if (activeStation && speedKmh <= GAME_CONFIG.FUEL_REFILL_MAX_SPEED_KMH && fuelPct < 99.9) {
       isRefueling = true;
+      this.refuelSafeGraceTimer = 2.6;
       const capScale = bikeSpec.fuelCapacity / 100;
       this.fuelAmount = Math.min(
         bikeSpec.fuelCapacity,
@@ -1671,6 +1674,9 @@ export class HeroRastarEngine {
     } else {
       this.fuelHoseGroup.visible = false;
       if (!inFuelZone) this.refuelBonusGiven = false;
+      if (this.refuelSafeGraceTimer > 0) {
+        this.refuelSafeGraceTimer = Math.max(0, this.refuelSafeGraceTimer - dt);
+      }
     }
 
     // Empty tank + stopped off-station for ~4s => "জ্বালানি শেষ!" Game Over
@@ -2275,21 +2281,24 @@ export class HeroRastarEngine {
         p.mode === 'chasing' &&
         (this.gameState === GameState.PLAYING || this.gameState === GameState.CRASHED)
       ) {
-        p.angerTimer -= dt;
+        const pumpProtected = this.gameState === GameState.PLAYING && this.refuelSafeGraceTimer > 0;
+        p.angerTimer -= dt * (pumpProtected ? 1.5 : 1.0);
         const dx = this.playerX - p.x;
         const dz = wrapLoopDelta(this.playerZ, p.z);
         const dist = Math.hypot(dx, dz);
-        if (dist > 0.9) {
-          const chaseSpd = this.gameState === GameState.CRASHED ? 7.8 : 7.2;
+        const minHoldDist = pumpProtected ? 3.8 : 0.9;
+        if (dist > minHoldDist) {
+          const chaseSpd = this.gameState === GameState.CRASHED ? 7.8 : 5.2;
           p.x += (dx / dist) * chaseSpd * dt;
           p.z += (dz / dist) * chaseSpd * dt;
           p.rig.group.rotation.y = Math.atan2(dx, dz);
-          p.walkPhase += dt * 15;
+          p.walkPhase += dt * 13;
         } else {
-          // Swinging arms to beat the caught rider during mob catch crash!
-          p.walkPhase += dt * 20;
+          // Shout/wave angrily while holding outside pump or beating caught rider
+          if (pumpProtected) p.rig.group.rotation.y = Math.atan2(dx, dz);
+          p.walkPhase += dt * 16;
         }
-        if (this.gameState === GameState.PLAYING && (p.angerTimer <= 0 || dist > 75)) {
+        if (this.gameState === GameState.PLAYING && (p.angerTimer <= 0 || dist > 48)) {
           p.mode = p.isCrosswalk ? 'crossing' : 'sidewalk';
           p.rig.angryBadge.visible = false;
         }
@@ -2338,13 +2347,19 @@ export class HeroRastarEngine {
   }
 
   private angerNearbyWitnesses(originX: number, originZ: number): void {
+    let activeChasers = 0;
+    for (const p of this.pedestrians) {
+      if (p.mode === 'chasing') activeChasers += 1;
+    }
+    if (activeChasers >= 4) return;
+
     let angered = 0;
     for (const p of this.pedestrians) {
       if (p.mode === 'knocked' || p.mode === 'chasing') continue;
       const dist = Math.hypot(p.x - originX, wrapLoopDelta(p.z, originZ));
-      if (dist < 34 && angered < 5) {
+      if (dist < 22 && angered < 2 && activeChasers + angered < 4) {
         p.mode = 'chasing';
-        p.angerTimer = 14.0;
+        p.angerTimer = 8.5;
         p.rig.angryBadge.visible = true;
         angered += 1;
       }
@@ -2461,7 +2476,7 @@ export class HeroRastarEngine {
 
   private checkPedestrianInteractions(isBoosting: boolean): void {
     const absSpd = Math.abs(this.forwardSpeed);
-    const isMovingFastEnoughToRam = absSpd > 3.8 || isBoosting;
+    const isMovingFastEnoughToRam = absSpd > 3.0 || isBoosting;
     const bikeSpec = this.getActiveBikeSpec();
 
     for (const p of this.pedestrians) {
@@ -2470,10 +2485,10 @@ export class HeroRastarEngine {
       const dz = wrapLoopDelta(this.playerZ, p.z);
       const dist = Math.hypot(dx, dz);
 
-      const catchRadius = p.mode === 'chasing' && !isMovingFastEnoughToRam ? 1.18 : 0.98;
+      const catchRadius = p.mode === 'chasing' && !isMovingFastEnoughToRam ? 0.96 : 0.95;
       if (dist < catchRadius) {
-        // ONLY beat/kill the player if they stopped/slowed down and an angry mob member catches them!
-        if (p.mode === 'chasing' && !isMovingFastEnoughToRam) {
+        // ONLY beat/kill the player if they stopped/slowed down outside refuel grace and an angry mob member catches them!
+        if (p.mode === 'chasing' && !isMovingFastEnoughToRam && this.refuelSafeGraceTimer <= 0) {
           this.triggerBigCrash(
             'দাঁড়িয়ে যাওয়ায় ক্ষিপ্ত জনতা ধরে পিটিয়েছে!',
             'Caught & beaten by angry crowd after stopping!'
