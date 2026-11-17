@@ -260,6 +260,7 @@ export class HeroRastarEngine {
   private emptyStoppedTimer = 0;
   private refuelBonusGiven = false;
   private refuelSafeGraceTimer = 0;
+  private refuelShieldUsedThisStop = false;
 
   // Showroom & Bike Progression
   private heroBankScore = 0;
@@ -969,6 +970,7 @@ export class HeroRastarEngine {
     this.emptyStoppedTimer = 0;
     this.refuelBonusGiven = false;
     this.refuelSafeGraceTimer = 0;
+    this.refuelShieldUsedThisStop = false;
     this.showroomExitCooldown = 0;
     this.showroomVisitedLock = false;
     this.showroomSaluteLock = false;
@@ -1587,14 +1589,14 @@ export class HeroRastarEngine {
       );
     }
 
-    // 2. Smoothed Speed-Scaled Steering (centers faster on release, flips in reverse)
+    // 2. Smoothed Speed-Scaled Steering (smooth ramp-in, crisp center on release, flips in reverse)
     const rawSteer = (this.input.left ? 1 : 0) - (this.input.right ? 1 : 0); // +1 left (+Yaw CCW), -1 right
-    const steerRate = rawSteer !== 0 ? 7.5 : 14.0;
+    const steerRate = rawSteer !== 0 ? 5.4 : 14.0;
     this.smoothedSteer = THREE.MathUtils.damp(this.smoothedSteer, rawSteer, steerRate, dt);
 
     const absSpeed = Math.abs(this.forwardSpeed);
     const speedNorm = THREE.MathUtils.clamp(absSpeed / bikeSpec.maxBoostMps, 0, 1);
-    const turnAuthority = THREE.MathUtils.lerp(2.25, 0.72, speedNorm) * (absSpeed < 1.0 ? 0.35 : 1.0);
+    const turnAuthority = THREE.MathUtils.lerp(1.48, 0.54, speedNorm) * (absSpeed < 1.0 ? 0.35 : 1.0);
     const reverseFlip = this.forwardSpeed < -0.5 ? -1 : 1;
     this.playerYaw += this.smoothedSteer * turnAuthority * reverseFlip * dt;
 
@@ -1654,9 +1656,17 @@ export class HeroRastarEngine {
     let isRefueling = false;
     const fuelPct = this.getFuelPercent();
 
+    if (!inFuelZone) {
+      this.refuelBonusGiven = false;
+      this.refuelShieldUsedThisStop = false;
+    }
+
     if (activeStation && speedKmh <= GAME_CONFIG.FUEL_REFILL_MAX_SPEED_KMH && fuelPct < 99.9) {
       isRefueling = true;
-      this.refuelSafeGraceTimer = 2.6;
+      if (!this.refuelShieldUsedThisStop) {
+        this.refuelShieldUsedThisStop = true;
+        this.refuelSafeGraceTimer = 2.0;
+      }
       const capScale = bikeSpec.fuelCapacity / 100;
       this.fuelAmount = Math.min(
         bikeSpec.fuelCapacity,
@@ -1673,10 +1683,10 @@ export class HeroRastarEngine {
       }
     } else {
       this.fuelHoseGroup.visible = false;
-      if (!inFuelZone) this.refuelBonusGiven = false;
-      if (this.refuelSafeGraceTimer > 0) {
-        this.refuelSafeGraceTimer = Math.max(0, this.refuelSafeGraceTimer - dt);
-      }
+    }
+
+    if (this.refuelSafeGraceTimer > 0) {
+      this.refuelSafeGraceTimer = Math.max(0, this.refuelSafeGraceTimer - dt);
     }
 
     // Empty tank + stopped off-station for ~4s => "জ্বালানি শেষ!" Game Over
@@ -2281,21 +2291,17 @@ export class HeroRastarEngine {
         p.mode === 'chasing' &&
         (this.gameState === GameState.PLAYING || this.gameState === GameState.CRASHED)
       ) {
-        const pumpProtected = this.gameState === GameState.PLAYING && this.refuelSafeGraceTimer > 0;
-        p.angerTimer -= dt * (pumpProtected ? 1.5 : 1.0);
+        p.angerTimer -= dt;
         const dx = this.playerX - p.x;
         const dz = wrapLoopDelta(this.playerZ, p.z);
         const dist = Math.hypot(dx, dz);
-        const minHoldDist = pumpProtected ? 3.8 : 0.9;
-        if (dist > minHoldDist) {
+        if (dist > 0.9) {
           const chaseSpd = this.gameState === GameState.CRASHED ? 7.8 : 5.2;
           p.x += (dx / dist) * chaseSpd * dt;
           p.z += (dz / dist) * chaseSpd * dt;
           p.rig.group.rotation.y = Math.atan2(dx, dz);
           p.walkPhase += dt * 13;
         } else {
-          // Shout/wave angrily while holding outside pump or beating caught rider
-          if (pumpProtected) p.rig.group.rotation.y = Math.atan2(dx, dz);
           p.walkPhase += dt * 16;
         }
         if (this.gameState === GameState.PLAYING && (p.angerTimer <= 0 || dist > 48)) {

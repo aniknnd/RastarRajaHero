@@ -409,8 +409,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 <p className="font-bengali font-bold text-amber-300 text-[15px]">
                   তেল (Fuel/Petrol) ফুরিয়ে গেলে বাম পাশের &ldquo;তেল পাম্প&rdquo;-এ বা ডাউনটাউন পাম্পে থামুন!
                 </p>
-                <p className="text-emerald-100/90 mt-1 text-[13px] leading-snug">
-                  Keep-left Dhaka rules: Left lanes go forward, oncoming traffic is on the right. Slow below 20 km/h on any green-yellow Fuel Pad to attach the refuel hose (তেল ভরুন). Explore side streets too!
+                <p className="font-bengali text-emerald-100/95 mt-1 text-[13px] leading-snug">
+                  ঢাকার বাম লেনের নিয়ম: বাম লেন দিয়ে সামনে এগোন, ডান পাশে বিপরীত দিকের গাড়ি। সবুজ-হলুদ তেল প্যাডে গতি কমালেই পাইপ লেগে তেল ভরা শুরু হবে—পাশের রাস্তাগুলোও ঘুরে দেখুন!
                 </p>
               </div>
             </div>
@@ -421,12 +421,6 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               <span className="font-bengali font-semibold leading-snug">
                 সব গাড়ি সিগনাল মানবে — আপনি <strong className="text-amber-300">নিয়ম ভেঙে</strong> এগিয়ে যান! ১,০০,০০০ ও ২,০০,০০০ পয়েন্টে <strong className="text-emerald-300">নিলয় হিরো শোরুমে</strong> গিয়ে বড় বাইক নিন — বাস-ট্যাংকারও চুরমার!
               </span>
-            </div>
-
-            {/* Control hint */}
-            <div className="text-[13px] leading-snug text-slate-200 bg-slate-900/90 border border-slate-700 rounded-lg px-3 py-2 text-center">
-              <span className="font-bengali text-amber-300 font-bold">নিয়ন্ত্রণ (Controls):</span>{' '}
-              W / ↑ চলুন · S / ↓ পেছনে · A/D বা ,/. ডান-বাম · Shift বুস্ট · Space হ্যান্ডব্রেক · H হর্ন
             </div>
 
             {/* Equipped Bike + Showroom Button */}
