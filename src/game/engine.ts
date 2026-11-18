@@ -424,7 +424,7 @@ export class HeroRastarEngine {
     }
 
     window.addEventListener('resize', this.handleResize);
-    window.addEventListener('blur', this.handleWindowBlur);
+    window.addEventListener('blur', this.handleWindowBlurAutoPause);
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
     window.addEventListener('pointerdown', this.handleFirstGesture, { passive: true });
@@ -945,6 +945,22 @@ export class HeroRastarEngine {
     this.screenFlashTimer = duration;
   }
 
+  public togglePause(): void {
+    if (this.gameState !== GameState.PLAYING) return;
+    this.gameState = GameState.PAUSE;
+    // Drop every held key/touch so resuming never inherits a stuck throttle.
+    this.handleWindowBlur();
+    this.audio.updateEngine(0, false, false);
+    this.emitHud();
+  }
+
+  public resumeGame(): void {
+    if (this.gameState !== GameState.PAUSE) return;
+    this.gameState = GameState.PLAYING;
+    this.audio.updateEngine(Math.abs(this.forwardSpeed) * GAME_CONFIG.SPEED_KMH_FACTOR, this.wasBoosting, true, this.getActiveBikeSpec().tier);
+    this.emitHud();
+  }
+
   public startGame(keepSelectedBike = false): void {
     this.audio.unlock();
     this.audio.resetRideAudio();
@@ -1117,6 +1133,20 @@ export class HeroRastarEngine {
     return next;
   }
 
+  public toggleSfxMute(): boolean {
+    this.audio.unlock();
+    const next = !this.audio.isSfxMuted();
+    this.audio.setSfxMuted(next);
+    return next;
+  }
+
+  public toggleMusicMute(): boolean {
+    this.audio.unlock();
+    const next = !this.audio.isMusicMuted();
+    this.audio.setMusicMuted(next);
+    return next;
+  }
+
   public openShowroomFromMenu(): void {
     this.audio.unlock();
     this.audio.playShowroomOpen();
@@ -1224,6 +1254,14 @@ export class HeroRastarEngine {
       this.closeShowroom();
       return;
     }
+    if (e.code === 'Escape' && this.gameState === GameState.PLAYING) {
+      this.togglePause();
+      return;
+    }
+    if (e.code === 'Escape' && this.gameState === GameState.PAUSE) {
+      this.resumeGame();
+      return;
+    }
     if (e.code === 'Enter' && this.gameState === GameState.MENU) {
       this.startGame();
       return;
@@ -1277,6 +1315,15 @@ export class HeroRastarEngine {
     this.commaSteer = false;
     this.periodSteer = false;
     this.releaseAllTouchControls();
+  };
+
+  // Auto-pause when the tab/window loses focus mid-ride so the player never
+  // comes back to a wreck they couldn't see coming.
+  private handleWindowBlurAutoPause = (): void => {
+    this.handleWindowBlur();
+    if (this.gameState === GameState.PLAYING) {
+      this.togglePause();
+    }
   };
 
   private handleResize = (): void => {
@@ -1411,6 +1458,17 @@ export class HeroRastarEngine {
     if (this.hitstopTimer > 0) {
       this.hitstopTimer -= dt;
       this.updateParticles(dt * 0.25);
+      return;
+    }
+
+    // === PAUSE: freeze the entire simulation (traffic, peds, particles, bike) ===
+    if (this.gameState === GameState.PAUSE) {
+      this.audio.updateEngine(0, false, false);
+      this.hudEmitAccumulator += dt;
+      if (this.hudEmitAccumulator >= 0.25) {
+        this.hudEmitAccumulator = 0;
+        this.emitHud();
+      }
       return;
     }
 
@@ -1596,7 +1654,7 @@ export class HeroRastarEngine {
 
     const absSpeed = Math.abs(this.forwardSpeed);
     const speedNorm = THREE.MathUtils.clamp(absSpeed / bikeSpec.maxBoostMps, 0, 1);
-    const turnAuthority = THREE.MathUtils.lerp(1.48, 0.54, speedNorm) * (absSpeed < 1.0 ? 0.35 : 1.0);
+    const turnAuthority = THREE.MathUtils.lerp(1.48, 0.78, speedNorm) * (absSpeed < 1.0 ? 0.35 : 1.0);
     const reverseFlip = this.forwardSpeed < -0.5 ? -1 : 1;
     this.playerYaw += this.smoothedSteer * turnAuthority * reverseFlip * dt;
 
@@ -1995,12 +2053,19 @@ export class HeroRastarEngine {
     return MISSION_TEMPLATES[this.missionIdx % MISSION_TEMPLATES.length];
   }
 
+  // Missions pay out more each time the player clears a full lap of the
+  // template list, so late runs stay worth chasing instead of repeating the
+  // same four objectives for the same reward forever.
+  private getMissionBonus(m: MissionTemplate): number {
+    return m.reward + this.missionLoop * 150 + this.missionLoop * this.missionLoop * 40;
+  }
+
   private advanceMission(kind: MissionKind, amount = 1): void {
     const m = this.getCurrentMission();
     if (m.kind !== kind) return;
     this.missionProgress += amount;
     if (this.missionProgress >= m.target) {
-      const bonus = m.reward + this.missionLoop * 150;
+      const bonus = this.getMissionBonus(m);
       const bikeSpec = this.getActiveBikeSpec();
       this.addPoints(bonus);
       this.combo = Math.min(10, this.combo + 1);
@@ -2247,6 +2312,19 @@ export class HeroRastarEngine {
       if (newZ <= -GAME_CONFIG.LOOP_LENGTH) newZ += GAME_CONFIG.LOOP_LENGTH;
       if (newZ > 0) newZ -= GAME_CONFIG.LOOP_LENGTH;
 
+      // Density cap: never let the road fill with Titans (smashRank 3).
+      // At tier 3 the weighted picker loves them, so enforce a hard ceiling
+      // and fall back to a lower-rank kind instead of recycling into another.
+      let chosenKind = kind;
+      if (tier === 3 && VEHICLE_SPECS[kind].smashRank >= 3) {
+        const activeTitans = this.traffic.filter(
+          (o) => !o.isCityVehicle && !o.wrecked && VEHICLE_SPECS[o.kind].smashRank >= 3
+        ).length;
+        if (activeTitans >= GAME_CONFIG.TITAN_TRAFFIC_CAP) {
+          chosenKind = pickWeightedKind(false, 2);
+        }
+      }
+
       // Spacing check
       for (const other of this.traffic) {
         if (other.id !== t.id && !other.isCityVehicle && other.laneIdx === laneIdx) {
@@ -2256,7 +2334,7 @@ export class HeroRastarEngine {
         }
       }
       t.laneIdx = laneIdx;
-      this.spawnTrafficSlot(t, kind, newZ, laneX, yaw);
+      this.spawnTrafficSlot(t, chosenKind, newZ, laneX, yaw);
     } else {
       const laneIdx = Math.floor(Math.random() * this.world.cityLanes.length);
       const lane = this.world.cityLanes[laneIdx];
@@ -2771,7 +2849,7 @@ export class HeroRastarEngine {
       titleBn: m.titleBn,
       progress: this.missionProgress,
       target: m.target,
-      reward: m.reward + this.missionLoop * 150,
+      reward: this.getMissionBonus(m),
     };
 
     this.onHudUpdate({
@@ -2816,6 +2894,8 @@ export class HeroRastarEngine {
       zoneLabelBn: this.getDhakaZoneLabel(),
       upcomingLight: light.phase,
       upcomingLightMeters: light.meters,
+      sfxMuted: this.audio.isSfxMuted(),
+      musicMuted: this.audio.isMusicMuted(),
     });
   }
 
@@ -2825,7 +2905,7 @@ export class HeroRastarEngine {
     clearTimeout(this.frameId);
 
     window.removeEventListener('resize', this.handleResize);
-    window.removeEventListener('blur', this.handleWindowBlur);
+    window.removeEventListener('blur', this.handleWindowBlurAutoPause);
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
     window.removeEventListener('pointerdown', this.handleFirstGesture);

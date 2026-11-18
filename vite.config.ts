@@ -1,7 +1,5 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import fs from 'fs';
-import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
@@ -23,28 +21,27 @@ export default defineConfig(() => {
       },
       react(),
       tailwindcss(),
-      // Copies src/assets into dist/ so root-relative URLs like
-      // "/src/assets/images/..." (e.g. generate_image output) still resolve
-      // in production builds. Do not remove.
-      {
-        name: 'copy-unbundled-src-assets',
-        apply: 'build',
-        closeBundle(error?: Error): void {
-          if (error) {
-            return;
-          }
-          const distDir = path.resolve(__dirname, 'dist');
-          const srcAssets = path.resolve(__dirname, 'src/assets');
-          const distAssets = path.resolve(distDir, 'src/assets');
-          if (fs.existsSync(distDir) && fs.existsSync(srcAssets)) {
-            fs.cpSync(srcAssets, distAssets, {recursive: true, force: true});
-          }
-        },
-      },
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': import.meta.dirname,
+      },
+    },
+    build: {
+      // Three.js alone is ~585 kB raw (~147 kB gzipped); a vendor chunk that
+      // size is expected for a WebGL game, so raise the reporter's threshold.
+      chunkSizeWarningLimit: 700,
+      rollupOptions: {
+        output: {
+          // Split the heavy, rarely-changing vendor code (Three.js, React) into
+          // its own long-term-cacheable chunks instead of one giant app bundle.
+          manualChunks(id: string): string | undefined {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('/three/')) return 'three';
+            if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return 'react';
+            return undefined;
+          },
+        },
       },
     },
     server: {

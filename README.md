@@ -22,7 +22,7 @@ A stylized, mobile-first 3D Dhaka-inspired motorcycle arcade game branded for **
   - High-speed collisions with Large vehicles (buses/trucks) or getting caught by the angry witness mob trigger a scripted **Slapper** big-crash sequence before Game Over.
 - **Petrol ("তেল / জ্বালানি") & Animated Refuel Hose**:
   - Three stations (`arterial_pump` at `-360 m`, `downtown_west_pump` at `-40 m`, and `downtown_east_pump` at `-360 m` off the city avenues).
-  - Slow below `20 km/h` on a Fuel Pad to attach an animated curved hose directly from the dispenser to the bike tank (`"ট্যাংক ফুল!"` bonus).
+  - Slow below `24 km/h` on a Fuel Pad to attach an animated curved hose directly from the dispenser to the bike tank (`"ট্যাংক ফুল!"` bonus).
   - Running empty and stopping off-station for 4 seconds ends the run (`"জ্বালানি শেষ!"`).
 - **Rule-Breaker Scoring & Bengali Quips**:
   - Wrong-way (`+15/s`), sidewalk riding (`+10/s`), and red-light smashing (`+200 × combo`), plus `+250` district lap bonuses and humorous Bengali speed quips above `80 km/h`.
@@ -39,9 +39,14 @@ A stylized, mobile-first 3D Dhaka-inspired motorcycle arcade game branded for **
 - **H**: Horn (`হর্ন`)
 - **Enter**: Start from Menu / Restart from Game Over
 - **R**: Restart after Game Over
+- **Esc**: Pause / Resume mid-ride (also closes the Showroom)
 
 ### Touch / Mobile
 - Lower-center multi-touch cluster with **ব্রেক (BRAKE)** centered, surrounded by **^ চলুন (ACCEL)**, **বুস্ট (BOOST)**, **হর্ন (HORN)**, **< বাম (LEFT)**, **ডান > (RIGHT)**, and **v পেছনে (REV)**.
+- Pause button in the top-right dock; the game also auto-pauses when the tab loses focus.
+
+### Audio
+- **SFX** (engine, horns, impacts, voice lines) and **Music** (menu loop) can be muted independently from the pause menu or the top-right dock toggles.
 
 ## Setup & Build
 

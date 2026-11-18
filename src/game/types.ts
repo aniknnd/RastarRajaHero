@@ -1,6 +1,7 @@
 export enum GameState {
   MENU = 'MENU',
   PLAYING = 'PLAYING',
+  PAUSE = 'PAUSE',
   SHOWROOM = 'SHOWROOM',
   CRASHED = 'CRASHED',
   GAME_OVER = 'GAME_OVER',
@@ -215,6 +216,8 @@ export interface HudSnapshot {
   zoneLabelBn: string;
   upcomingLight: TrafficLightPhase | null;
   upcomingLightMeters: number;
+  sfxMuted: boolean;
+  musicMuted: boolean;
 }
 
 export const GAME_CONFIG = {
@@ -247,6 +250,7 @@ export const GAME_CONFIG = {
   ARTERY_TRAFFIC_COUNT: 32,
   CITY_TRAFFIC_COUNT: 28,
   HIGH_SPEED_MSG_THRESHOLD_KMH: 80,
+  TITAN_TRAFFIC_CAP: 5, // Max smashRank-3 Titans (double-decker/tanker/fire/army/monster) on the road at once
   BEST_SCORE_STORAGE_KEY: 'hero_rastar_raja_best_score_v2',
   HERO_BANK_STORAGE_KEY: 'hero_rastar_raja_bank_v1',
   UNLOCKED_BIKES_STORAGE_KEY: 'hero_rastar_raja_unlocked_bikes_v1',

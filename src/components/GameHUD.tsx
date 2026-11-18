@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -11,6 +11,8 @@ import {
   Gauge,
   Lock,
   MapPin,
+  Music,
+  Pause,
   Play,
   RotateCcw,
   Shield,
@@ -22,19 +24,27 @@ import {
   Volume2,
   VolumeX,
   Zap,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import { BIKE_ORDER, BIKE_SPECS, GameState, type BikeTierId, type HudSnapshot } from '../game/types';
 
 interface GameHUDProps {
   hud: HudSnapshot;
   muted: boolean;
+  sfxMuted: boolean;
+  musicMuted: boolean;
   showTouchControls: boolean;
   onStart: () => void;
   onToggleMute: () => void;
+  onToggleSfxMute: () => void;
+  onToggleMusicMute: () => void;
   onToggleTouchControls: () => void;
   onOpenShowroom: () => void;
   onCloseShowroom: () => void;
   onSelectBike: (bikeId: BikeTierId) => { ok: boolean; message: string } | void;
+  onTogglePause: () => void;
+  onResumeGame: () => void;
 }
 
 const TitleLockupSVG: React.FC = () => (
@@ -134,19 +144,146 @@ const BikeSilhouetteSVG: React.FC<{ accentHex: string; tier: 1 | 2 | 3 }> = ({ a
   </svg>
 );
 
+/**
+ * Wheel / pinch / button zoom for the scrollable overlay cards (menu + game over).
+ * The card is scaled with the CSS `zoom` property so its layout reflows and the
+ * surrounding overlay can scroll to reach the enlarged content.
+ */
+function useCardZoom(active: boolean, minZoom = 0.6, maxZoom = 1.75) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const zoomRef = useRef(1);
+  const pinchStartDistRef = useRef(0);
+  const pinchStartZoomRef = useRef(1);
+
+  const applyZoom = useCallback(
+    (next: number) => {
+      const clamped = Math.round(Math.min(maxZoom, Math.max(minZoom, next)) * 100) / 100;
+      zoomRef.current = clamped;
+      setZoom(clamped);
+    },
+    [minZoom, maxZoom]
+  );
+
+  useEffect(() => {
+    if (!active) return;
+    const el = cardRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const delta = Math.abs(e.deltaY) < 40 ? -e.deltaY * 0.004 : e.deltaY < 0 ? 0.08 : -0.08;
+      applyZoom(zoomRef.current + delta);
+    };
+
+    const getTouchDist = (touches: TouchList) =>
+      Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        pinchStartDistRef.current = getTouchDist(e.touches);
+        pinchStartZoomRef.current = zoomRef.current;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && pinchStartDistRef.current > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        const dist = getTouchDist(e.touches);
+        applyZoom(pinchStartZoomRef.current * (dist / pinchStartDistRef.current));
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        pinchStartDistRef.current = 0;
+      }
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    el.addEventListener('touchstart', handleTouchStart, { passive: true });
+    el.addEventListener('touchmove', handleTouchMove, { passive: false });
+    el.addEventListener('touchend', handleTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+      el.removeEventListener('touchstart', handleTouchStart);
+      el.removeEventListener('touchmove', handleTouchMove);
+      el.removeEventListener('touchend', handleTouchEnd);
+      el.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [active, applyZoom]);
+
+  return {
+    cardRef,
+    zoom,
+    zoomIn: () => applyZoom(zoomRef.current + 0.12),
+    zoomOut: () => applyZoom(zoomRef.current - 0.12),
+    resetZoom: () => applyZoom(1),
+  };
+}
+
+const CardZoomBar: React.FC<{
+  zoom: number;
+  onZoomOut: () => void;
+  onZoomIn: () => void;
+  onReset: () => void;
+}> = ({ zoom, onZoomOut, onZoomIn, onReset }) => (
+  <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400">
+    <span className="font-bengali truncate">মাউস হুইল / দুই আঙুলে জুম</span>
+    <div className="inline-flex items-center gap-0.5 bg-slate-900 border border-slate-700 rounded-lg p-0.5 shrink-0">
+      <button
+        type="button"
+        onClick={onZoomOut}
+        aria-label="Zoom out"
+        className="p-1 rounded hover:bg-slate-800 text-slate-200 cursor-pointer"
+      >
+        <ZoomOut className="w-3.5 h-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={onReset}
+        title="Reset zoom"
+        className="px-1.5 py-0.5 rounded hover:bg-slate-800 font-bold tabular-nums text-amber-300 cursor-pointer whitespace-nowrap"
+      >
+        {Math.round(zoom * 100)}%
+      </button>
+      <button
+        type="button"
+        onClick={onZoomIn}
+        aria-label="Zoom in"
+        className="p-1 rounded hover:bg-slate-800 text-slate-200 cursor-pointer"
+      >
+        <ZoomIn className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  </div>
+);
+
 export const GameHUD: React.FC<GameHUDProps> = ({
   hud,
   muted,
+  sfxMuted,
+  musicMuted,
   showTouchControls,
   onStart,
   onToggleMute,
+  onToggleSfxMute,
+  onToggleMusicMute,
   onToggleTouchControls,
   onOpenShowroom,
   onCloseShowroom,
   onSelectBike,
+  onTogglePause,
+  onResumeGame,
 }) => {
   const [showroomFeedback, setShowroomFeedback] = useState<string | null>(null);
   const lowFuel = hud.fuelPercent <= 25;
+  const menuZoom = useCardZoom(hud.gameState === GameState.MENU);
+  const gameOverZoom = useCardZoom(hud.gameState === GameState.GAME_OVER);
 
   useEffect(() => {
     if (hud.gameState !== GameState.SHOWROOM) {
@@ -365,10 +502,92 @@ export const GameHUD: React.FC<GameHUDProps> = ({
     );
   }
 
+  // === PAUSE OVERLAY ===
+  if (hud.gameState === GameState.PAUSE) {
+    return (
+      <div className="fixed inset-0 z-40 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 pointer-events-auto overflow-y-auto">
+        <div className="w-full max-w-sm bg-slate-950 border-2 border-amber-400 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3 text-center my-auto">
+          <div>
+            <div className="inline-block bg-amber-400 text-slate-950 text-[11px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-md mb-1.5">
+              বিরতি • PAUSED
+            </div>
+            <h2 className="font-bengali text-2xl sm:text-3xl font-extrabold text-amber-300 tracking-wide">
+              খেলা থামানো হয়েছে
+            </h2>
+            <p className="text-xs text-slate-300 mt-1">
+              চাপ দিন <span className="font-bengali">Esc</span> আবার চালু করতে
+            </p>
+          </div>
+
+          {/* Audio controls: independent SFX + Music toggles */}
+          <div className="grid grid-cols-2 gap-2 text-left">
+            <button
+              type="button"
+              onClick={onToggleSfxMute}
+              className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-bold cursor-pointer ${
+                sfxMuted
+                  ? 'bg-slate-900 border-slate-600 text-slate-400 hover:border-amber-300'
+                  : 'bg-slate-900 border-emerald-400/70 text-emerald-200 hover:border-emerald-300'
+              }`}
+            >
+              {sfxMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
+              <span className="font-bengali">{sfxMuted ? 'প্রভাব বন্ধ' : 'প্রভাব চালু'}</span>
+              <span className="text-[10px] text-slate-400">(SFX)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onToggleMusicMute}
+              className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-bold cursor-pointer ${
+                musicMuted
+                  ? 'bg-slate-900 border-slate-600 text-slate-400 hover:border-amber-300'
+                  : 'bg-slate-900 border-sky-400/70 text-sky-200 hover:border-sky-300'
+              }`}
+            >
+              {musicMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-sky-400" />}
+              <span className="font-bengali">{musicMuted ? 'সঙ্গীত বন্ধ' : 'সঙ্গীত চালু'}</span>
+              <span className="text-[10px] text-slate-400">(Music)</span>
+            </button>
+          </div>
+
+          {/* Run stats */}
+          <div className="grid grid-cols-2 gap-2 text-left">
+            <div className="bg-slate-900 border border-slate-700 rounded-xl p-2 flex items-center justify-between">
+              <span className="text-xs text-slate-300 font-bengali">স্কোর</span>
+              <span className="text-sm font-bold tabular-nums text-white">{hud.score.toLocaleString()}</span>
+            </div>
+            <div className="bg-slate-900 border border-slate-700 rounded-xl p-2 flex items-center justify-between">
+              <span className="text-xs text-slate-300 font-bengali">দূরত্ব</span>
+              <span className="text-sm font-bold tabular-nums text-emerald-300">{hud.distanceMeters}m</span>
+            </div>
+            <div className="bg-slate-900 border border-slate-700 rounded-xl p-2 flex items-center justify-between">
+              <span className="text-xs text-slate-300 font-bengali">তেল</span>
+              <span className="text-sm font-bold tabular-nums text-amber-300">{hud.fuelPercent}%</span>
+            </div>
+            <div className="bg-slate-900 border border-slate-700 rounded-xl p-2 flex items-center justify-between">
+              <span className="text-xs text-slate-300 font-bengali">ল্যাপ</span>
+              <span className="text-sm font-bold tabular-nums text-sky-300">{hud.lapCount}</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onResumeGame}
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 active:scale-[0.98] text-white font-bold text-base py-3.5 rounded-xl border-2 border-emerald-200 shadow-lg cursor-pointer"
+          >
+            <Play className="w-5 h-5 fill-current" />
+            <span className="font-bengali text-lg font-extrabold">চালিয়ে যান</span>
+            <span className="text-xs uppercase tracking-wider text-emerald-100">(RESUME · Esc)</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // === MENU SCREEN ===
   if (hud.gameState === GameState.MENU) {
     return (
-      <div className="fixed inset-0 z-20 flex flex-col justify-between p-4 sm:p-6 pointer-events-none">
+      <div className="fixed inset-0 z-20 flex flex-col justify-between p-4 sm:p-6 pointer-events-none overflow-auto">
         {/* Top bar: Best Score + Hero Bank + Audio Toggle */}
         <div className="flex flex-wrap items-center justify-between gap-2 pointer-events-auto">
           <div className="flex flex-wrap items-center gap-2">
@@ -401,7 +620,17 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         <div className="flex flex-col items-center gap-3 max-w-lg mx-auto w-full mb-1 pointer-events-auto">
           <TitleLockupSVG />
 
-          <div className="w-full bg-slate-950/90 border-2 border-amber-400/60 rounded-2xl p-4 shadow-2xl space-y-2.5">
+          <div
+            ref={menuZoom.cardRef}
+            style={{ zoom: menuZoom.zoom, touchAction: 'pan-x pan-y' }}
+            className="w-full bg-slate-950/90 border-2 border-amber-400/60 rounded-2xl p-4 shadow-2xl space-y-2.5"
+          >
+            <CardZoomBar
+              zoom={menuZoom.zoom}
+              onZoomOut={menuZoom.zoomOut}
+              onZoomIn={menuZoom.zoomIn}
+              onReset={menuZoom.resetZoom}
+            />
             {/* Fueling & City Grid Guide */}
             <div className="flex items-start gap-2.5 bg-emerald-950/85 border border-emerald-500/50 rounded-xl p-2.5">
               <Fuel className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
@@ -729,13 +958,43 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               type="button"
               onClick={(e) => {
                 e.currentTarget.blur();
-                onToggleMute();
+                onToggleSfxMute();
               }}
-              title={muted ? 'Unmute' : 'Mute'}
+              title={sfxMuted ? 'Unmute SFX' : 'Mute SFX'}
               className="bg-slate-950/82 border border-slate-600/80 hover:border-amber-400 p-1 sm:p-1.5 rounded-md text-slate-200 cursor-pointer"
             >
-              {muted ? <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-400" /> : <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />}
+              {sfxMuted ? (
+                <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-400" />
+              ) : (
+                <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
+              )}
             </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onToggleMusicMute();
+              }}
+              title={musicMuted ? 'Unmute Music' : 'Mute Music'}
+              className="bg-slate-950/82 border border-slate-600/80 hover:border-amber-400 p-1 sm:p-1.5 rounded-md text-slate-200 cursor-pointer"
+            >
+              <span className="relative flex items-center justify-center w-3.5 h-3.5 sm:w-4 sm:h-4">
+                <Music className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${musicMuted ? 'text-red-400' : 'text-sky-400'}`} />
+              </span>
+            </button>
+            {hud.gameState === GameState.PLAYING && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.currentTarget.blur();
+                  onTogglePause();
+                }}
+                title="Pause (Esc)"
+                className="bg-slate-950/82 border border-slate-600/80 hover:border-amber-400 p-1 sm:p-1.5 rounded-md text-slate-200 cursor-pointer"
+              >
+                <Pause className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -809,8 +1068,18 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
       {/* === GAME OVER MODAL === */}
       {hud.gameState === GameState.GAME_OVER && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 pointer-events-auto overflow-y-auto">
-          <div className="w-full max-w-lg bg-slate-950 border-2 border-amber-400 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3 text-center my-auto">
+        <div className="fixed inset-0 z-40 flex p-3 sm:p-4 bg-slate-950/75 pointer-events-auto overflow-auto">
+          <div
+            ref={gameOverZoom.cardRef}
+            style={{ zoom: gameOverZoom.zoom, touchAction: 'pan-x pan-y' }}
+            className="w-full max-w-lg bg-slate-950 border-2 border-amber-400 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3 text-center m-auto"
+          >
+            <CardZoomBar
+              zoom={gameOverZoom.zoom}
+              onZoomOut={gameOverZoom.zoomOut}
+              onZoomIn={gameOverZoom.zoomIn}
+              onReset={gameOverZoom.resetZoom}
+            />
             <div>
               {hud.isNewBest ? (
                 <div className="inline-block bg-amber-400 text-slate-950 text-[11px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-md mb-1.5">

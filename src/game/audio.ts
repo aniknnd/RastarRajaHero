@@ -33,7 +33,8 @@ export class GameAudio {
   private activeVoiceClip: HTMLAudioElement | null = null;
 
   private musicMode: MusicMode = 'menu';
-  private muted = false;
+  private sfxMuted = false;
+  private musicMuted = false;
   private initialized = false;
   private unlocked = false;
 
@@ -72,7 +73,7 @@ export class GameAudio {
     const el = new Audio(src);
     el.loop = loop;
     el.preload = 'auto';
-    el.volume = this.muted ? 0 : volume;
+    el.volume = volume;
     return el;
   }
 
@@ -87,7 +88,7 @@ export class GameAudio {
         if (AudioCtx) {
           const ctx = new AudioCtx();
           const master = ctx.createGain();
-          master.gain.value = this.muted ? 0 : 0.42;
+          master.gain.value = this.sfxMuted ? 0 : 0.42;
           master.connect(ctx.destination);
 
           const filter = ctx.createBiquadFilter();
@@ -144,10 +145,10 @@ export class GameAudio {
   private syncMusicPlayback(): void {
     if (!this.unlocked) return;
 
-    const wantMenu = !this.muted && this.musicMode === 'menu';
+    const wantMenu = !this.musicMuted && this.musicMode === 'menu';
 
     if (this.menuMusic) {
-      this.menuMusic.volume = this.muted ? 0 : 0.34;
+      this.menuMusic.volume = this.musicMuted ? 0 : 0.34;
       if (wantMenu) {
         if (!this.menuPlayedOnce && this.menuMusic.paused) {
           this.menuPlayedOnce = true;
@@ -169,7 +170,7 @@ export class GameAudio {
     isVoiceLine = true,
     forceInterrupt = false
   ): void {
-    if (this.muted || !this.unlocked) return;
+    if (this.sfxMuted || !this.unlocked) return;
     const nowMs = performance.now();
 
     if (isVoiceLine && !forceInterrupt) {
@@ -193,7 +194,7 @@ export class GameAudio {
         this.activeVoiceClip.currentTime = 0;
       }
       base.currentTime = 0;
-      base.volume = this.muted ? 0 : volume;
+      base.volume = this.sfxMuted ? 0 : volume;
       if (isVoiceLine) {
         this.activeVoiceClip = base;
         this.lastVoiceStartMs = nowMs;
@@ -205,18 +206,38 @@ export class GameAudio {
   }
 
   public setMuted(mute: boolean): void {
-    this.muted = mute;
+    this.setSfxMuted(mute);
+    this.setMusicMuted(mute);
+  }
+
+  // SFX cover both the synthesised Web Audio graph (engine, horns, impacts)
+  // routed through masterGain and the MP3 one-shots. Music is only the menu
+  // loop, so the two can be toggled independently.
+  public setSfxMuted(mute: boolean): void {
+    this.sfxMuted = mute;
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setTargetAtTime(mute ? 0 : 0.42, this.ctx.currentTime, 0.04);
     }
     if (mute && this.activeVoiceClip && !this.activeVoiceClip.paused) {
       this.activeVoiceClip.pause();
     }
+  }
+
+  public setMusicMuted(mute: boolean): void {
+    this.musicMuted = mute;
     this.syncMusicPlayback();
   }
 
   public isMuted(): boolean {
-    return this.muted;
+    return this.sfxMuted || this.musicMuted;
+  }
+
+  public isSfxMuted(): boolean {
+    return this.sfxMuted;
+  }
+
+  public isMusicMuted(): boolean {
+    return this.musicMuted;
   }
 
   public updateEngine(speedKmh: number, isBoosting: boolean, active: boolean, tier: 1 | 2 | 3 = 1): void {
@@ -243,7 +264,7 @@ export class GameAudio {
   }
 
   public playHorn(pitchScale = 1, isAmbient = false): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     if (isAmbient) {
       // Traffic honks in the distance: keep them, but rare and varied,
       // so the SAME honk never repeats like a loop.
@@ -277,7 +298,7 @@ export class GameAudio {
   }
 
   public playDing(combo = 1): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     // Combo dings fire in bursts — keep them chimey, not machine-gun.
     if (!this.sfxGapOk('ding', 280)) return;
     try {
@@ -301,7 +322,7 @@ export class GameAudio {
   }
 
   public playWhoosh(): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     // Near-miss swishes come in chains — a short breather keeps them special.
     if (!this.sfxGapOk('whoosh', 600)) return;
     try {
@@ -344,7 +365,7 @@ export class GameAudio {
       this.playMp3Clip(clip, 0.85, clip !== AUDIO_PATHS.smash2, false);
     }
 
-    if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     try {
       const now = this.ctx.currentTime;
       const bufSize = Math.floor(this.ctx.sampleRate * 0.24);
@@ -406,7 +427,7 @@ export class GameAudio {
     this.setMusicMode('none');
     this.playMp3Clip(AUDIO_PATHS.bigCrash, 0.95, true, true);
 
-    if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     try {
       const now = this.ctx.currentTime;
       const bufSize = Math.floor(this.ctx.sampleRate * 0.6);
@@ -450,7 +471,7 @@ export class GameAudio {
   public playSlap(): void {
     this.playMp3Clip(AUDIO_PATHS.slapReact, 0.95, true, true);
 
-    if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     try {
       const now = this.ctx.currentTime;
       const bufSize = Math.floor(this.ctx.sampleRate * 0.14);
@@ -480,7 +501,7 @@ export class GameAudio {
   }
 
   public playThud(): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     // Scraping a wall fires this constantly — space the booms out a bit.
     if (!this.sfxGapOk('thud', 650)) return;
 
@@ -508,7 +529,7 @@ export class GameAudio {
       this.playMp3Clip(AUDIO_PATHS.pedHit, 0.88, true, false);
     }
 
-    if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     try {
       const now = this.ctx.currentTime;
       const o = this.ctx.createOscillator();
@@ -528,7 +549,7 @@ export class GameAudio {
   }
 
   public playViolation(): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     if (!this.sfxGapOk('violation', 1500)) return;
     try {
       const now = this.ctx.currentTime;
@@ -549,7 +570,7 @@ export class GameAudio {
   }
 
   public playRefuelTick(fuelPercent: number): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     const perfNow = performance.now();
     if (perfNow - this.lastRefuelBeep < 180) return;
     this.lastRefuelBeep = perfNow;
@@ -573,7 +594,7 @@ export class GameAudio {
   }
 
   public playTankFull(): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     try {
       const now = this.ctx.currentTime;
       [523, 659, 784].forEach((freq, idx) => {
@@ -594,7 +615,7 @@ export class GameAudio {
   }
 
   public playShowroomOpen(): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     try {
       const now = this.ctx.currentTime;
       [587.33, 880].forEach((freq, idx) => {
@@ -615,7 +636,7 @@ export class GameAudio {
   }
 
   public playUpgradeFanfare(): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     try {
       const now = this.ctx.currentTime;
       [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
@@ -639,7 +660,7 @@ export class GameAudio {
     this.setMusicMode('none');
     this.playMp3Clip(AUDIO_PATHS.gameOver, 0.92, true, true);
 
-    if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     try {
       const now = this.ctx.currentTime;
       [330, 294, 247, 196].forEach((freq, idx) => {
