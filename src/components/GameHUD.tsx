@@ -466,11 +466,11 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   // === SCREEN FLASH OVERLAY CLASS ===
   const flashClass =
     hud.screenFlashTone === 'red'
-      ? 'bg-red-600/28 border-8 border-red-500/60'
+      ? 'bg-red-600/24 border-4 border-red-500/55'
       : hud.screenFlashTone === 'amber'
-        ? 'bg-amber-400/20 border-8 border-amber-300/55'
+        ? 'bg-amber-400/18 border-4 border-amber-300/50'
         : hud.screenFlashTone === 'green'
-          ? 'bg-emerald-500/20 border-8 border-emerald-300/55'
+          ? 'bg-emerald-500/18 border-4 border-emerald-300/50'
           : '';
 
   // === PLAYING / CRASHED / GAME OVER HUD ===
@@ -478,14 +478,14 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   const pointsToBest = Math.max(0, hud.bestScore - hud.score);
 
   return (
-    <div className="fixed inset-0 z-20 pointer-events-none flex flex-col justify-between p-2.5 sm:p-4">
+    <div className="fixed inset-0 z-20 pointer-events-none p-2 sm:p-3.5">
       {/* Subtle high-speed / Raja Fever perimeter glow */}
       {hud.gameState === GameState.PLAYING && (hud.speedKmh > 105 || hud.feverActive) && (
         <div
           className={`fixed inset-0 pointer-events-none transition-opacity duration-150 ${
             hud.feverActive
-              ? 'border-[6px] border-amber-400/45 shadow-[inset_0_0_48px_rgba(251,191,36,0.28)]'
-              : 'border-[4px] border-sky-400/35 shadow-[inset_0_0_36px_rgba(56,189,248,0.22)]'
+              ? 'border-[3px] sm:border-[5px] border-amber-400/45 shadow-[inset_0_0_32px_rgba(251,191,36,0.22)]'
+              : 'border-[2px] sm:border-[4px] border-sky-400/35 shadow-[inset_0_0_24px_rgba(56,189,248,0.18)]'
           }`}
         />
       )}
@@ -496,185 +496,148 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       )}
 
       {/* Top Perimeter Row */}
-      <div className="relative z-10 flex items-start justify-between gap-2">
-        {/* Top-Left: স্কোর (Score), হিরো ব্যাংক (Hero Bank), কম্বো, Violations & Angry Mob */}
-        <div className="flex flex-col gap-1.5">
-          <div className="bg-slate-950/88 border border-amber-400/55 rounded-xl px-3 py-2 shadow-lg min-w-[172px]">
-            <div className="flex items-baseline justify-between gap-3">
-              <div>
-                <span className="font-bengali text-xs font-bold text-amber-300">স্কোর</span>
-                <span className="text-[9px] uppercase tracking-wider text-slate-400 ml-1">Score</span>
-              </div>
-              <span className="text-xl sm:text-2xl font-bold tabular-nums leading-none text-white">
+      <div className="relative z-10 flex items-start justify-between gap-1.5 sm:gap-3">
+        {/* Top-Left: Compact Score, Bank, Active Bike/Zone, Combo & Mission */}
+        <div className="flex flex-col gap-1 max-w-[49%] sm:max-w-[238px]">
+          <div className="bg-slate-950/82 border border-amber-400/50 rounded-lg px-2 py-1 sm:px-2.5 sm:py-1.5 shadow-md">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-bengali text-[10px] sm:text-xs font-bold text-amber-300 shrink-0">স্কোর</span>
+              <span className="text-sm sm:text-xl font-bold tabular-nums leading-none text-white truncate">
                 {hud.score.toLocaleString()}
               </span>
             </div>
-            <div className="flex items-center justify-between gap-3 mt-1 text-[11px] text-slate-300">
-              <span>
-                <span className="font-bengali text-slate-400">সেরা:</span>{' '}
-                <strong className="tabular-nums text-amber-200">{hud.bestScore.toLocaleString()}</strong>
+
+            <div className="flex items-center justify-between gap-2 mt-0.5 text-[9px] sm:text-[10px] text-slate-300 tabular-nums">
+              <span className="truncate">
+                <span className="font-bengali text-slate-400">সেরা</span> {hud.bestScore.toLocaleString()}
               </span>
-              <span className="tabular-nums text-emerald-300 font-semibold">
+              <span className="text-emerald-300 font-semibold shrink-0">
                 <span className="font-bengali">ল্যাপ</span> {hud.lapCount}
               </span>
             </div>
 
-            {/* Hero Bank & Next Bike Progress */}
-            <div className="mt-1.5 pt-1.5 border-t border-slate-800">
-              <div className="flex items-center justify-between gap-2 text-[11px]">
-                <span className="font-bengali text-emerald-300 font-bold flex items-center gap-1">
-                  <Store className="w-3 h-3" /> ব্যাংক:
+            {/* Compact Hero Bank & Next Bike Progress */}
+            <div className="mt-1 pt-1 border-t border-slate-800/90">
+              <div className="flex items-center justify-between gap-1.5 text-[9px] sm:text-[10px] leading-none">
+                <span className="font-bengali text-emerald-300 font-bold truncate">
+                  {canAffordNext ? 'আপগ্রেড রেডি!' : `ব্যাংক · T${activeBike.tier}`}
                 </span>
-                <span className="tabular-nums font-extrabold text-amber-300">
+                <span className="tabular-nums font-bold text-amber-300 shrink-0">
                   {hud.bankScore.toLocaleString()}
+                  {nextBike ? <span className="text-slate-400 font-normal">/{Math.round(nextBike.cost / 1000)}k</span> : ''}
                 </span>
               </div>
-              {nextBike ? (
-                <div className="mt-1">
-                  <div className="flex items-center justify-between text-[10px]">
-                    <span className={`font-bengali font-bold ${canAffordNext ? 'text-amber-300' : 'text-slate-400'}`}>
-                      {canAffordNext ? 'শোরুমে যান! (Upgrade Ready)' : `টার্গেট Tier ${nextBike.tier}`}
-                    </span>
-                    <span className="tabular-nums text-slate-300">{nextBike.cost.toLocaleString()}</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mt-0.5">
-                    <div
-                      className={`h-full transition-all duration-150 ${
-                        canAffordNext ? 'bg-amber-400' : 'bg-sky-400'
-                      }`}
-                      style={{ width: `${nextUnlockProgressPct}%` }}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="text-[10px] font-bengali font-bold text-emerald-300 mt-0.5">
-                  সব হিরো বাইক আনলকড! (Apex Titan)
+              {nextBike && (
+                <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden mt-1">
+                  <div
+                    className={`h-full transition-all duration-150 ${
+                      canAffordNext ? 'bg-amber-400' : 'bg-sky-400'
+                    }`}
+                    style={{ width: `${nextUnlockProgressPct}%` }}
+                  />
                 </div>
               )}
             </div>
           </div>
 
-          {/* Active Bike Badge + Zone + Rule-Breaker Counter */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <div className="bg-slate-950/88 border border-amber-400/50 rounded-lg px-2 py-1 flex items-center gap-1.5 text-[11px] shadow">
-              <span
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ backgroundColor: activeBike.accentHex }}
-              />
-              <span className="font-bengali font-bold text-white">
-                T{activeBike.tier} · {activeBike.nameBn}
-              </span>
+          {/* Compact Zone + Combo + Rule-Break + Mob Chips */}
+          <div className="flex flex-wrap items-center gap-1">
+            <div className="bg-slate-950/82 border border-slate-700/90 rounded px-1.5 py-0.5 flex items-center gap-1 text-[9px] sm:text-[10px] text-sky-200 max-w-[140px] sm:max-w-[220px]">
+              <Compass className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-sky-400 shrink-0" />
+              <span className="font-bengali font-semibold truncate">{hud.zoneLabelBn}</span>
             </div>
-            <div className="bg-slate-950/85 border border-slate-700 rounded-lg px-2.5 py-1 flex items-center gap-1.5 text-[11px] text-sky-200 shadow">
-              <Compass className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-              <span className="font-bengali font-semibold">{hud.zoneLabelBn}</span>
-            </div>
+
+            {hud.combo > 1 && (
+              <div
+                className={`${
+                  hud.feverActive ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-amber-400'
+                } text-slate-950 rounded px-1.5 py-0.5 text-[9px] sm:text-[11px] font-extrabold leading-tight shadow`}
+              >
+                <div className="flex items-center gap-0.5 tabular-nums">
+                  <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current" />
+                  <span>{hud.feverActive ? 'FEVER ' : ''}x{hud.combo}</span>
+                </div>
+                <div className="w-full h-[2px] bg-amber-950/30 rounded-full mt-0.5 overflow-hidden">
+                  <div
+                    className="h-full bg-slate-950 transition-all duration-75"
+                    style={{ width: `${Math.round(hud.comboTimerNorm * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
             {hud.ruleBreakCount > 0 && (
-              <div className="bg-rose-950/90 border border-rose-400/70 rounded-lg px-2 py-1 text-[11px] text-rose-200 shadow">
-                <span className="font-bengali font-bold">নিয়ম ভঙ্গ:</span>{' '}
-                <strong className="tabular-nums text-amber-300">{hud.ruleBreakCount}</strong>
+              <div className="bg-rose-950/88 border border-rose-400/60 rounded px-1.5 py-0.5 text-[9px] sm:text-[10px] text-rose-200 tabular-nums">
+                <span className="font-bengali">ভঙ্গ</span> <strong className="text-amber-300">{hud.ruleBreakCount}</strong>
+              </div>
+            )}
+
+            {hud.angryMobCount > 0 && (
+              <div className="bg-orange-700/90 border border-amber-300 text-white rounded px-1.5 py-0.5 flex items-center gap-0.5 text-[9px] sm:text-[10px] font-bold tabular-nums">
+                <Users className="w-2.5 h-2.5 text-amber-200 shrink-0" />
+                <span>{hud.angryMobCount}</span>
               </div>
             )}
           </div>
 
-          {/* Live Micro-Mission Card */}
-          <div className="bg-slate-950/88 border border-emerald-500/55 rounded-lg px-2.5 py-1.5 shadow max-w-[230px]">
-            <div className="flex items-center justify-between gap-2 text-[11px]">
-              <span className="font-bengali font-bold text-emerald-300 truncate">
-                লক্ষ্য: {hud.mission.titleBn}
-              </span>
+          {/* Ultra-slim Micro-Mission */}
+          <div className="bg-slate-950/82 border border-emerald-500/45 rounded px-1.5 py-0.5 sm:px-2 sm:py-1 max-w-[170px] sm:max-w-[225px]">
+            <div className="flex items-center justify-between gap-1.5 text-[9px] sm:text-[10px] leading-tight">
+              <span className="font-bengali font-semibold text-emerald-300 truncate">{hud.mission.titleBn}</span>
               <span className="tabular-nums font-bold text-amber-300 shrink-0">
                 {hud.mission.progress}/{hud.mission.target}
               </span>
             </div>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-400 transition-all duration-100"
-                  style={{ width: `${missionPct}%` }}
-                />
-              </div>
-              <span className="text-[10px] font-bold text-amber-200 tabular-nums">+{hud.mission.reward}</span>
+            <div className="w-full h-[3px] bg-slate-800 rounded-full overflow-hidden mt-0.5">
+              <div className="h-full bg-emerald-400 transition-all duration-100" style={{ width: `${missionPct}%` }} />
             </div>
           </div>
 
-          {hud.combo > 1 && (
-            <div
-              className={`${
-                hud.feverActive ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-amber-500'
-              } text-slate-950 rounded-lg px-2.5 py-1 shadow-md border border-amber-200`}
-            >
-              <div className="flex items-center justify-between gap-2 text-xs font-extrabold">
-                <span className="flex items-center gap-1 font-bengali">
-                  <Zap className="w-3.5 h-3.5 fill-current" />{' '}
-                  {hud.feverActive ? 'রাজার ঝড়! FEVER' : 'কম্বো (COMBO)'}
-                </span>
-                <span className="tabular-nums text-sm">x{hud.combo}</span>
-              </div>
-              <div className="w-full h-1 bg-amber-950/30 rounded-full mt-1 overflow-hidden">
-                <div
-                  className="h-full bg-slate-950 transition-all duration-75"
-                  style={{ width: `${Math.round(hud.comboTimerNorm * 100)}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {hud.angryMobCount > 0 && (
-            <div className="bg-orange-700/95 border border-amber-300 text-white rounded-lg px-2.5 py-1.5 shadow-lg flex items-center gap-1.5">
-              <Users className="w-4 h-4 text-amber-200 shrink-0" />
-              <span className="font-bengali text-xs font-bold">
-                ক্ষিপ্ত জনতা ধাওয়া করছে! ({hud.angryMobCount})
-              </span>
-            </div>
-          )}
-
           {hud.activeViolation && (
-            <div className="bg-red-700/95 border border-red-200 text-white rounded-lg px-2.5 py-1.5 shadow-lg flex items-center gap-1.5">
-              <AlertTriangle className="w-4 h-4 text-amber-300 shrink-0" />
-              <span className="font-bengali text-xs font-bold">{hud.activeViolation}</span>
+            <div className="bg-red-700/92 border border-red-200/80 text-white rounded px-1.5 py-0.5 flex items-center gap-1 text-[9px] sm:text-[10px] font-bold max-w-[170px] sm:max-w-xs">
+              <AlertTriangle className="w-2.5 h-2.5 text-amber-300 shrink-0" />
+              <span className="font-bengali truncate">{hud.activeViolation}</span>
             </div>
           )}
         </div>
 
-        {/* Top-Center: Funny High-Speed Bengali Message & Event Popups */}
-        <div className="hidden sm:flex flex-col items-center gap-1.5 max-w-md text-center">
-          {hud.funnyMessage && (
-            <div className="bg-amber-400 text-slate-950 border-2 border-slate-950 rounded-xl px-4 py-2 shadow-xl">
-              <p className="font-bengali text-sm font-extrabold leading-snug">{hud.funnyMessage}</p>
-            </div>
-          )}
+        {/* Desktop Top-Center Dock: keeps center canvas clean */}
+        <div className="hidden sm:flex flex-col items-center gap-1 max-w-sm text-center pt-0.5">
           {hud.latestPopup && (
             <div
-              className={`rounded-lg px-3.5 py-1.5 shadow-lg border ${
+              className={`rounded-lg px-3 py-1 shadow-md border ${
                 hud.latestPopup.tone === 'danger'
-                  ? 'bg-red-700/95 border-red-300 text-white'
+                  ? 'bg-red-700/92 border-red-300 text-white'
                   : hud.latestPopup.tone === 'refuel'
-                    ? 'bg-emerald-700/95 border-emerald-300 text-white'
+                    ? 'bg-emerald-700/92 border-emerald-300 text-white'
                     : hud.latestPopup.tone === 'warning'
-                      ? 'bg-amber-600/95 border-amber-200 text-white'
-                      : 'bg-slate-950/92 border-amber-400 text-amber-300'
+                      ? 'bg-amber-600/92 border-amber-200 text-white'
+                      : 'bg-slate-950/88 border-amber-400 text-amber-300'
               }`}
             >
-              <p className="font-bengali text-xs font-bold">{hud.latestPopup.title}</p>
-              {hud.latestPopup.subtitle && (
-                <p className="text-[11px] font-bold text-white">{hud.latestPopup.subtitle}</p>
-              )}
+              <p className="font-bengali text-xs font-bold leading-tight">
+                {hud.latestPopup.title}
+                {hud.latestPopup.subtitle && (
+                  <span className="text-[11px] font-semibold text-white/95"> · {hud.latestPopup.subtitle}</span>
+                )}
+              </p>
+            </div>
+          )}
+          {hud.funnyMessage && (
+            <div className="bg-amber-400/95 text-slate-950 border border-slate-950 rounded-lg px-3 py-0.5 shadow-md">
+              <p className="font-bengali text-xs font-extrabold leading-tight">{hud.funnyMessage}</p>
             </div>
           )}
         </div>
 
-        {/* Top-Right: গতি (Speedometer + Bar), তেল (Fuel), পাম্প ও শোরুম দূরত্ব, Utility Buttons */}
-        <div className="flex flex-col items-end gap-1.5">
-          <div className="bg-slate-950/88 border border-slate-600 rounded-xl px-3 py-2 shadow-lg min-w-[164px]">
+        {/* Top-Right: Compact Speed, Fuel, Nearest Landmarks, Light & Audio */}
+        <div className="flex flex-col items-end gap-1 max-w-[48%] sm:max-w-[196px]">
+          <div className="bg-slate-950/82 border border-slate-600/80 rounded-lg px-2 py-1 sm:px-2.5 sm:py-1.5 shadow-md w-full">
             <div className="flex items-baseline justify-between gap-2">
-              <div>
-                <span className="font-bengali text-[11px] font-bold text-slate-300">গতি</span>
-                <span className="text-[9px] uppercase tracking-wider text-slate-400 ml-1">Speed</span>
-              </div>
-              <div className="flex items-baseline gap-1">
+              <span className="font-bengali text-[10px] sm:text-[11px] font-bold text-slate-300">গতি</span>
+              <div className="flex items-baseline gap-0.5">
                 <span
-                  className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${
+                  className={`text-base sm:text-2xl font-bold tabular-nums leading-none ${
                     hud.speedKmh > 110
                       ? 'text-sky-300'
                       : hud.speedKmh > 80
@@ -684,35 +647,31 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 >
                   {hud.speedKmh}
                 </span>
-                <span className="text-[10px] font-bold text-slate-400">km/h</span>
+                <span className="text-[9px] font-bold text-slate-400">km/h</span>
               </div>
             </div>
 
-            {/* Speedometer bar */}
-            <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mt-1.5 border border-slate-700">
+            <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden mt-1">
               <div
                 className={`h-full transition-all duration-75 ${
-                  hud.speedKmh > 110
-                    ? 'bg-sky-400'
-                    : hud.speedKmh > 80
-                      ? 'bg-amber-400'
-                      : 'bg-emerald-400'
+                  hud.speedKmh > 110 ? 'bg-sky-400' : hud.speedKmh > 80 ? 'bg-amber-400' : 'bg-emerald-400'
                 }`}
                 style={{ width: `${Math.round(hud.speedNorm * 100)}%` }}
               />
             </div>
 
             {/* Fuel (তেল) Meter */}
-            <div className="mt-2">
-              <div className="flex items-center justify-between text-[11px] mb-1">
-                <span className={`font-bengali font-bold flex items-center gap-1 ${lowFuel ? 'text-red-400' : 'text-emerald-300'}`}>
-                  <Fuel className="w-3.5 h-3.5" /> তেল
+            <div className="mt-1.5">
+              <div className="flex items-center justify-between text-[9px] sm:text-[10px] leading-none mb-0.5">
+                <span className={`font-bengali font-bold flex items-center gap-0.5 ${lowFuel ? 'text-red-400' : 'text-emerald-300'}`}>
+                  <Fuel className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> তেল
                 </span>
                 <span className={`font-bold tabular-nums ${lowFuel ? 'text-red-300' : 'text-white'}`}>
-                  {hud.fuelAmount}/{hud.fuelCapacity}L <span className="text-[10px] text-slate-400">({hud.fuelPercent}%)</span>
+                  <span className="hidden sm:inline">{hud.fuelAmount}/{hud.fuelCapacity}L · </span>
+                  {hud.fuelPercent}%
                 </span>
               </div>
-              <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+              <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                 <div
                   className={`h-full transition-all duration-100 ${
                     hud.isRefueling
@@ -726,42 +685,35 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                   style={{ width: `${hud.fuelPercent}%` }}
                 />
               </div>
-              <div className="flex items-center justify-between text-[10px] text-slate-300 mt-1">
-                <span className="font-bengali flex items-center gap-1">
-                  <MapPin className="w-3 h-3 text-emerald-400" /> পাম্প:
+
+              <div className="flex items-center justify-between gap-1.5 text-[9px] sm:text-[10px] text-slate-300 mt-1 tabular-nums whitespace-nowrap">
+                <span className="flex items-center gap-0.5 text-emerald-300 font-semibold">
+                  <MapPin className="w-2.5 h-2.5 shrink-0" />
+                  <span className="font-bengali text-slate-300 font-normal">পাম্প</span> {hud.nearestPumpMeters}m
                 </span>
-                <span className="tabular-nums font-bold text-emerald-300">{hud.nearestPumpMeters}m</span>
-              </div>
-              <div className="flex items-center justify-between text-[10px] mt-0.5">
-                <span className={`font-bengali flex items-center gap-1 ${canAffordNext ? 'text-amber-300 font-bold' : 'text-slate-300'}`}>
-                  <Store className="w-3 h-3 text-amber-400" /> নিলয় শোরুম:
-                </span>
-                <span className={`tabular-nums font-bold ${canAffordNext ? 'text-amber-300' : 'text-sky-300'}`}>
-                  {hud.nearestShowroomMeters}m
+                <span className={`font-semibold ${canAffordNext ? 'text-amber-300' : 'text-sky-300'}`}>
+                  <span className="font-bengali text-slate-300 font-normal">শোরুম</span> {hud.nearestShowroomMeters}m
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Upcoming Traffic Light Indicator */}
-          {hud.upcomingLight && (
-            <div className="bg-slate-950/88 border border-slate-600 rounded-lg px-2.5 py-1 flex items-center gap-2 text-[11px]">
-              <span
-                className={`w-2.5 h-2.5 rounded-full ${
-                  hud.upcomingLight === 'RED'
-                    ? 'bg-red-500'
-                    : hud.upcomingLight === 'YELLOW'
-                      ? 'bg-amber-400'
-                      : 'bg-emerald-400'
-                }`}
-              />
-              <span className="font-bengali text-slate-200">সিগন্যাল</span>
-              <span className="tabular-nums font-bold text-white">{hud.upcomingLightMeters}m</span>
-            </div>
-          )}
-
-          {/* Compact Mute + Touch Pad toggle */}
-          <div className="flex items-center gap-1.5 pointer-events-auto">
+          {/* Signal + Mute + Touch Pad toggle on one compact line */}
+          <div className="flex items-center gap-1 pointer-events-auto">
+            {hud.upcomingLight && (
+              <div className="bg-slate-950/82 border border-slate-600/80 rounded px-1.5 py-1 flex items-center gap-1 text-[9px] sm:text-[10px]">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    hud.upcomingLight === 'RED'
+                      ? 'bg-red-500'
+                      : hud.upcomingLight === 'YELLOW'
+                        ? 'bg-amber-400'
+                        : 'bg-emerald-400'
+                  }`}
+                />
+                <span className="tabular-nums font-bold text-white">{hud.upcomingLightMeters}m</span>
+              </div>
+            )}
             <button
               type="button"
               onClick={(e) => {
@@ -769,9 +721,9 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 onToggleTouchControls();
               }}
               title="Toggle Touch Controls"
-              className="bg-slate-950/88 border border-slate-600 hover:border-amber-400 p-1.5 rounded-lg text-slate-200 cursor-pointer"
+              className="bg-slate-950/82 border border-slate-600/80 hover:border-amber-400 p-1 sm:p-1.5 rounded-md text-slate-200 cursor-pointer"
             >
-              <Gamepad2 className={`w-4 h-4 ${showTouchControls ? 'text-amber-300' : 'text-slate-400'}`} />
+              <Gamepad2 className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${showTouchControls ? 'text-amber-300' : 'text-slate-400'}`} />
             </button>
             <button
               type="button"
@@ -780,66 +732,80 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 onToggleMute();
               }}
               title={muted ? 'Unmute' : 'Mute'}
-              className="bg-slate-950/88 border border-slate-600 hover:border-amber-400 p-1.5 rounded-lg text-slate-200 cursor-pointer"
+              className="bg-slate-950/82 border border-slate-600/80 hover:border-amber-400 p-1 sm:p-1.5 rounded-md text-slate-200 cursor-pointer"
             >
-              {muted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
+              {muted ? <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-400" /> : <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Mobile Center Toast (visible on small screens below top HUD) */}
-      <div className="relative z-10 flex sm:hidden flex-col items-center gap-1.5 text-center mx-auto max-w-[92vw] mt-1">
-        {hud.funnyMessage && (
-          <div className="bg-amber-400 text-slate-950 border-2 border-slate-950 rounded-xl px-3 py-1.5 shadow-xl">
-            <p className="font-bengali text-xs font-extrabold leading-snug">{hud.funnyMessage}</p>
+      {/* Upper-Sky Slim Notification Strip: stays clear of the bike in center viewport */}
+      <div className="relative z-10 mt-1 sm:mt-2 flex flex-col items-center gap-1 text-center mx-auto max-w-[90vw] sm:max-w-sm">
+        {/* Mobile-only compact single notification toast (priority: latestPopup > funnyMessage) */}
+        <div className="flex sm:hidden flex-col items-center w-full">
+          {hud.latestPopup ? (
+            <div
+              className={`rounded-md px-2.5 py-0.5 shadow border max-w-full ${
+                hud.latestPopup.tone === 'danger'
+                  ? 'bg-red-700/92 border-red-300 text-white'
+                  : hud.latestPopup.tone === 'refuel'
+                    ? 'bg-emerald-700/92 border-emerald-300 text-white'
+                    : hud.latestPopup.tone === 'warning'
+                      ? 'bg-amber-600/92 border-amber-200 text-white'
+                      : 'bg-slate-950/88 border-amber-400 text-amber-300'
+              }`}
+            >
+              <p className="font-bengali text-[11px] font-bold leading-tight truncate">
+                {hud.latestPopup.title}
+                {hud.latestPopup.subtitle && (
+                  <span className="font-semibold text-white/95"> · {hud.latestPopup.subtitle}</span>
+                )}
+              </p>
+            </div>
+          ) : hud.funnyMessage ? (
+            <div className="bg-amber-400/95 text-slate-950 border border-slate-950 rounded-md px-2.5 py-0.5 shadow max-w-full">
+              <p className="font-bengali text-[11px] font-extrabold leading-tight truncate">{hud.funnyMessage}</p>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Compact Showroom Zone Approach Pill */}
+        {hud.isInShowroomZone && hud.gameState === GameState.PLAYING && (
+          <div className="bg-slate-950/90 border border-amber-400 text-white rounded-lg px-2.5 py-1 shadow">
+            <p className="font-bengali text-[10px] sm:text-xs font-bold text-amber-300 flex items-center justify-center gap-1">
+              <Store className="w-3 h-3 text-emerald-300 shrink-0" />
+              শোরুম টিম স্যালুট দিচ্ছে · ঢুকতে গতি কমান (≤২৫ km/h)
+            </p>
           </div>
         )}
-        {hud.latestPopup && (
-          <div className="bg-slate-950/92 border border-amber-400 text-amber-300 rounded-lg px-3 py-1 shadow-md">
-            <p className="font-bengali text-xs font-bold">{hud.latestPopup.title}</p>
-            {hud.latestPopup.subtitle && (
-              <p className="text-[10px] font-semibold text-white">{hud.latestPopup.subtitle}</p>
+
+        {/* Compact Refueling Pill */}
+        {(hud.isRefueling || (hud.isInFuelZone && hud.fuelPercent < 99)) && (
+          <div className="bg-emerald-900/92 border border-emerald-300 text-white rounded-lg px-2.5 py-1 shadow">
+            {hud.isRefueling ? (
+              <p className="font-bengali text-[11px] sm:text-xs font-bold text-amber-200 flex items-center justify-center gap-1">
+                <Flame className="w-3.5 h-3.5 text-sky-300 shrink-0" />
+                তেল ভরা হচ্ছে... {hud.fuelPercent}% ({hud.fuelAmount}/{hud.fuelCapacity}L)
+              </p>
+            ) : (
+              <p className="font-bengali text-[10px] sm:text-xs font-bold text-amber-200">
+                তেল নিতে গতি কমান (≤২৪ km/h)
+              </p>
             )}
           </div>
         )}
+
+        {/* Compact CRASHED sequence alert (keeps 3D rider chase visible) */}
+        {hud.gameState === GameState.CRASHED && (
+          <div className="bg-red-950/92 border border-amber-400 rounded-xl px-3 py-1.5 shadow-lg max-w-[86vw] sm:max-w-sm">
+            <p className="font-bengali text-xs sm:text-sm font-extrabold text-amber-300 leading-tight">
+              থামো! পাবলিক আসছে... (WATCH OUT!)
+            </p>
+            <p className="font-bengali text-[10px] sm:text-xs text-white mt-0.5 leading-snug">{hud.gameOverReasonBn}</p>
+          </div>
+        )}
       </div>
-
-      {/* Showroom Zone Approach Banner */}
-      {hud.isInShowroomZone && hud.gameState === GameState.PLAYING && (
-        <div className="relative z-10 mx-auto mb-2 bg-gradient-to-r from-red-950 via-slate-950 to-red-950 border-2 border-amber-400 text-white rounded-xl px-4 py-2 shadow-xl text-center">
-          <p className="font-bengali text-xs sm:text-sm font-extrabold text-amber-300 flex items-center justify-center gap-1.5">
-            <Store className="w-4 h-4 text-emerald-300" />
-            নিলয় হিরো শোরুম টিম স্যালুট দিচ্ছে! ঢুকতে গতি কমান (≤২৫ km/h)
-          </p>
-        </div>
-      )}
-
-      {/* Refueling Banner */}
-      {(hud.isRefueling || (hud.isInFuelZone && hud.fuelPercent < 99)) && (
-        <div className="relative z-10 mx-auto mb-44 sm:mb-40 bg-emerald-900/95 border-2 border-emerald-300 text-white rounded-xl px-4 py-2 shadow-xl text-center">
-          {hud.isRefueling ? (
-            <p className="font-bengali text-sm font-bold text-amber-200 flex items-center justify-center gap-1.5">
-              <Flame className="w-4 h-4 text-sky-300" />
-              তেল ভরা হচ্ছে (Refueling)... {hud.fuelAmount}/{hud.fuelCapacity}L ({hud.fuelPercent}%)
-            </p>
-          ) : (
-            <p className="font-bengali text-xs font-bold text-amber-200">
-              তেল নিতে গতি কমান বা থামুন (≤২০ km/h · Slow to refill)
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* CRASHED sequence banner before Game Over modal */}
-      {hud.gameState === GameState.CRASHED && (
-        <div className="relative z-10 mx-auto mb-44 sm:mb-36 bg-red-950/95 border-2 border-amber-400 rounded-2xl px-5 py-3 shadow-2xl text-center max-w-md">
-          <p className="font-bengali text-base sm:text-lg font-extrabold text-amber-300">
-            থামো! পাবলিক আসছে... (WATCH OUT!)
-          </p>
-          <p className="font-bengali text-xs text-white mt-0.5">{hud.gameOverReasonBn}</p>
-        </div>
-      )}
 
       {/* === GAME OVER MODAL === */}
       {hud.gameState === GameState.GAME_OVER && (

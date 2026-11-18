@@ -937,7 +937,7 @@ export class HeroRastarEngine {
   private pushPopup(title: string, subtitle: string | undefined, tone: EventPopup['tone']): void {
     this.popupSeq += 1;
     this.latestPopup = { id: this.popupSeq, title, subtitle, tone };
-    this.popupTimer = 2.0;
+    this.popupTimer = 1.45;
   }
 
   private flashScreen(tone: 'red' | 'amber' | 'green', duration = 0.25): void {

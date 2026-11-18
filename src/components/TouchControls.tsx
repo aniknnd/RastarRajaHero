@@ -130,15 +130,15 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onControlChange, v
 
   return (
     <div
-      className="pointer-events-auto fixed bottom-3 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center px-2 pb-[env(safe-area-inset-bottom,0px)]"
+      className="pointer-events-auto fixed bottom-2 sm:bottom-3 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center px-2 pb-[env(safe-area-inset-bottom,0px)]"
       style={{ maxWidth: 'calc(100vw - 16px)' }}
     >
       {/* Two rows of three equal columns.
           Row 1: বুস্ট (BOOST) | ^ চলুন (ACCEL) | হর্ন (HORN)
           Row 2: < বাম (LEFT) | v পেছনে (REV) | > ডান (RIGHT) */}
       <div
-        className="grid grid-cols-3 gap-2"
-        style={{ gridTemplateColumns: 'repeat(3, 5.25rem)' }}
+        className="grid grid-cols-3 gap-1.5 sm:gap-2"
+        style={{ gridTemplateColumns: 'repeat(3, minmax(4.5rem, 5.1rem))' }}
       >
         <HoldButton
           control="boost"
@@ -147,10 +147,10 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onControlChange, v
           subLabel="BOOST"
           primaryBengali
           onControlChange={onControlChange}
-          className="w-full h-[3.9rem] bg-gradient-to-b from-sky-700/90 to-sky-950/95 border-sky-300/70 text-sky-50"
-          activeClassName="w-full h-[3.9rem] bg-sky-400 border-sky-100 text-slate-950 ring-2 ring-white/80 shadow-[0_0_22px_rgba(56,189,248,0.75)]"
+          className="w-full h-[3.15rem] sm:h-[3.75rem] bg-gradient-to-b from-sky-700/90 to-sky-950/95 border-sky-300/70 text-sky-50"
+          activeClassName="w-full h-[3.15rem] sm:h-[3.75rem] bg-sky-400 border-sky-100 text-slate-950 ring-2 ring-white/80 shadow-[0_0_22px_rgba(56,189,248,0.75)]"
         >
-          <Flame className="w-[1.15rem] h-[1.15rem]" />
+          <Flame className="w-4 h-4 sm:w-[1.15rem] sm:h-[1.15rem]" />
         </HoldButton>
 
         <HoldButton
@@ -160,10 +160,10 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onControlChange, v
           subLabel="ACCEL"
           primaryBengali
           onControlChange={onControlChange}
-          className="w-full h-[4.4rem] bg-gradient-to-b from-emerald-600/92 to-emerald-900/95 border-emerald-300/85 text-emerald-50"
-          activeClassName="w-full h-[4.4rem] bg-emerald-400 border-emerald-100 text-slate-950 ring-2 ring-white/85 shadow-[0_0_24px_rgba(52,211,153,0.8)]"
+          className="w-full h-[3.5rem] sm:h-[4.15rem] bg-gradient-to-b from-emerald-600/92 to-emerald-900/95 border-emerald-300/85 text-emerald-50"
+          activeClassName="w-full h-[3.5rem] sm:h-[4.15rem] bg-emerald-400 border-emerald-100 text-slate-950 ring-2 ring-white/85 shadow-[0_0_24px_rgba(52,211,153,0.8)]"
         >
-          <ArrowUp className="w-6 h-6" />
+          <ArrowUp className="w-5 h-5 sm:w-6 sm:h-6" />
         </HoldButton>
 
         <HoldButton
@@ -173,10 +173,10 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onControlChange, v
           subLabel="HORN"
           primaryBengali
           onControlChange={onControlChange}
-          className="w-full h-[3.9rem] bg-gradient-to-b from-amber-600/90 to-amber-900/95 border-amber-300/75 text-amber-50"
-          activeClassName="w-full h-[3.9rem] bg-amber-400 border-amber-100 text-slate-950 ring-2 ring-white/80 shadow-[0_0_22px_rgba(251,191,36,0.75)]"
+          className="w-full h-[3.15rem] sm:h-[3.75rem] bg-gradient-to-b from-amber-600/90 to-amber-900/95 border-amber-300/75 text-amber-50"
+          activeClassName="w-full h-[3.15rem] sm:h-[3.75rem] bg-amber-400 border-amber-100 text-slate-950 ring-2 ring-white/80 shadow-[0_0_22px_rgba(251,191,36,0.75)]"
         >
-          <Volume2 className="w-[1.15rem] h-[1.15rem]" />
+          <Volume2 className="w-4 h-4 sm:w-[1.15rem] sm:h-[1.15rem]" />
         </HoldButton>
 
         <HoldButton
@@ -186,10 +186,10 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onControlChange, v
           subLabel="LEFT"
           primaryBengali
           onControlChange={onControlChange}
-          className="w-full h-16 bg-gradient-to-b from-slate-700/92 to-slate-950/95 border-slate-300/70 text-white"
-          activeClassName="w-full h-16 bg-amber-400 border-white text-slate-950 ring-2 ring-white/85 shadow-[0_0_22px_rgba(251,191,36,0.8)]"
+          className="w-full h-[3.3rem] sm:h-[3.85rem] bg-gradient-to-b from-slate-700/92 to-slate-950/95 border-slate-300/70 text-white"
+          activeClassName="w-full h-[3.3rem] sm:h-[3.85rem] bg-amber-400 border-white text-slate-950 ring-2 ring-white/85 shadow-[0_0_22px_rgba(251,191,36,0.8)]"
         >
-          <ArrowLeft className="w-[1.35rem] h-[1.35rem]" />
+          <ArrowLeft className="w-[1.2rem] h-[1.2rem] sm:w-[1.35rem] sm:h-[1.35rem]" />
         </HoldButton>
 
         <HoldButton
@@ -199,10 +199,10 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onControlChange, v
           subLabel="REV"
           primaryBengali
           onControlChange={onControlChange}
-          className="w-full h-16 bg-gradient-to-b from-slate-700/92 to-slate-950/95 border-amber-400/75 text-amber-100"
-          activeClassName="w-full h-16 bg-amber-500 border-white text-slate-950 ring-2 ring-white/85 shadow-[0_0_22px_rgba(245,158,11,0.8)]"
+          className="w-full h-[3.3rem] sm:h-[3.85rem] bg-gradient-to-b from-slate-700/92 to-slate-950/95 border-amber-400/75 text-amber-100"
+          activeClassName="w-full h-[3.3rem] sm:h-[3.85rem] bg-amber-500 border-white text-slate-950 ring-2 ring-white/85 shadow-[0_0_22px_rgba(245,158,11,0.8)]"
         >
-          <ArrowDown className="w-[1.35rem] h-[1.35rem]" />
+          <ArrowDown className="w-[1.2rem] h-[1.2rem] sm:w-[1.35rem] sm:h-[1.35rem]" />
         </HoldButton>
 
         <HoldButton
@@ -212,10 +212,10 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onControlChange, v
           subLabel="RIGHT"
           primaryBengali
           onControlChange={onControlChange}
-          className="w-full h-16 bg-gradient-to-b from-slate-700/92 to-slate-950/95 border-slate-300/70 text-white"
-          activeClassName="w-full h-16 bg-amber-400 border-white text-slate-950 ring-2 ring-white/85 shadow-[0_0_22px_rgba(251,191,36,0.8)]"
+          className="w-full h-[3.3rem] sm:h-[3.85rem] bg-gradient-to-b from-slate-700/92 to-slate-950/95 border-slate-300/70 text-white"
+          activeClassName="w-full h-[3.3rem] sm:h-[3.85rem] bg-amber-400 border-white text-slate-950 ring-2 ring-white/85 shadow-[0_0_22px_rgba(251,191,36,0.8)]"
         >
-          <ArrowRight className="w-[1.35rem] h-[1.35rem]" />
+          <ArrowRight className="w-[1.2rem] h-[1.2rem] sm:w-[1.35rem] sm:h-[1.35rem]" />
         </HoldButton>
       </div>
     </div>
