@@ -609,7 +609,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   // === MENU SCREEN ===
   if (hud.gameState === GameState.MENU) {
     return (
-      <div className="fixed inset-0 z-20 pointer-events-none overflow-auto overscroll-contain">
+      <div className="fixed inset-0 z-20 pointer-events-auto overflow-auto overscroll-contain">
         <div className="min-h-full flex flex-col gap-3 p-4 sm:p-6">
           {/* Top bar: Best Score + Hero Bank + Audio Toggle */}
           <div className="flex flex-wrap items-center justify-between gap-2 pointer-events-auto shrink-0">

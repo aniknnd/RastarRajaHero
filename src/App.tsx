@@ -143,7 +143,7 @@ export default function App() {
   return (
     <main className="relative w-screen h-screen overflow-hidden bg-amber-950 select-none">
       {/* Isolated WebGL viewport container */}
-      <div ref={mountRef} className="absolute inset-0 w-full h-full" />
+      <div ref={mountRef} className="absolute inset-0 w-full h-full touch-none" />
 
       {/* Full-viewport Game Shell HUD */}
       <GameHUD

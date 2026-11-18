@@ -350,6 +350,9 @@ export class HeroRastarEngine {
     this.renderer.shadowMap.enabled = !this.isSoftwareGl;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.setSize(container.clientWidth || window.innerWidth, container.clientHeight || window.innerHeight);
+    // Keep browser gestures (scroll / pull-to-refresh / pinch) off the ride
+    // surface. Overlay cards opt back into panning via their own touch-action.
+    this.renderer.domElement.style.touchAction = 'none';
     container.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
