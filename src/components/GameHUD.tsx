@@ -145,6 +145,23 @@ const BikeSilhouetteSVG: React.FC<{ accentHex: string; tier: 1 | 2 | 3 }> = ({ a
 );
 
 /**
+ * Nearest ancestor that can actually scroll vertically right now.
+ * Used to decide whether the wheel should zoom or be handed back to the
+ * browser for scrolling.
+ */
+function getScrollableParent(el: HTMLElement | null): HTMLElement | null {
+  let node = el?.parentElement ?? null;
+  while (node) {
+    const overflowY = window.getComputedStyle(node).overflowY;
+    if (/(auto|scroll|overlay)/.test(overflowY) && node.scrollHeight > node.clientHeight + 1) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
+/**
  * Wheel / pinch / button zoom for the scrollable overlay cards (menu + game over).
  * The card is scaled with the CSS `zoom` property so its layout reflows and the
  * surrounding overlay can scroll to reach the enlarged content.
@@ -171,6 +188,11 @@ function useCardZoom(active: boolean, minZoom = 0.6, maxZoom = 1.75) {
     if (!el) return;
 
     const handleWheel = (e: WheelEvent) => {
+      // Ctrl/Cmd + wheel always zooms, matching normal browser conventions.
+      // Otherwise, if the card already overflows its scroll container, let the
+      // wheel scroll instead of trapping the player at a zoom they can't pan.
+      if (!e.ctrlKey && !e.metaKey && getScrollableParent(el)) return;
+
       e.preventDefault();
       e.stopPropagation();
       const delta = Math.abs(e.deltaY) < 40 ? -e.deltaY * 0.004 : e.deltaY < 0 ? 0.08 : -0.08;
@@ -587,9 +609,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   // === MENU SCREEN ===
   if (hud.gameState === GameState.MENU) {
     return (
-      <div className="fixed inset-0 z-20 flex flex-col justify-between p-4 sm:p-6 pointer-events-none overflow-auto">
-        {/* Top bar: Best Score + Hero Bank + Audio Toggle */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pointer-events-auto">
+      <div className="fixed inset-0 z-20 pointer-events-none overflow-auto overscroll-contain">
+        <div className="min-h-full flex flex-col gap-3 p-4 sm:p-6">
+          {/* Top bar: Best Score + Hero Bank + Audio Toggle */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pointer-events-auto shrink-0">
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2 bg-slate-950/88 border border-amber-400/55 px-3.5 py-2 rounded-xl shadow-lg">
               <Trophy className="w-4 h-4 text-amber-400" />
@@ -617,14 +640,16 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         </div>
 
         {/* Bottom-center Title & Compact Play Card leaving upper 3D Metro + Dhaka street open */}
-        <div className="flex flex-col items-center gap-3 max-w-lg mx-auto w-full mb-1 pointer-events-auto">
-          <TitleLockupSVG />
+          <div className="mt-auto w-full max-w-lg mx-auto pointer-events-auto">
+            <div className="mx-auto w-full max-w-[440px]">
+              <TitleLockupSVG />
+            </div>
 
-          <div
-            ref={menuZoom.cardRef}
-            style={{ zoom: menuZoom.zoom, touchAction: 'pan-x pan-y' }}
-            className="w-full bg-slate-950/90 border-2 border-amber-400/60 rounded-2xl p-4 shadow-2xl space-y-2.5"
-          >
+            <div
+              ref={menuZoom.cardRef}
+              style={{ zoom: menuZoom.zoom, touchAction: 'pan-x pan-y' }}
+              className="w-full bg-slate-950/90 border-2 border-amber-400/60 rounded-2xl p-4 shadow-2xl space-y-2.5"
+            >
             <CardZoomBar
               zoom={menuZoom.zoom}
               onZoomOut={menuZoom.zoomOut}
@@ -689,6 +714,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           </div>
         </div>
       </div>
+    </div>
     );
   }
 
@@ -1068,19 +1094,20 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
       {/* === GAME OVER MODAL === */}
       {hud.gameState === GameState.GAME_OVER && (
-        <div className="fixed inset-0 z-40 flex p-3 sm:p-4 bg-slate-950/75 pointer-events-auto overflow-auto">
-          <div
-            ref={gameOverZoom.cardRef}
-            style={{ zoom: gameOverZoom.zoom, touchAction: 'pan-x pan-y' }}
-            className="w-full max-w-lg bg-slate-950 border-2 border-amber-400 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3 text-center m-auto"
-          >
-            <CardZoomBar
-              zoom={gameOverZoom.zoom}
-              onZoomOut={gameOverZoom.zoomOut}
-              onZoomIn={gameOverZoom.zoomIn}
-              onReset={gameOverZoom.resetZoom}
-            />
-            <div>
+        <div className="fixed inset-0 z-40 bg-slate-950/75 pointer-events-auto overflow-auto overscroll-contain">
+          <div className="min-h-full flex p-3 sm:p-4">
+            <div
+              ref={gameOverZoom.cardRef}
+              style={{ zoom: gameOverZoom.zoom, touchAction: 'pan-x pan-y' }}
+              className="w-full max-w-lg bg-slate-950 border-2 border-amber-400 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3 text-center m-auto"
+            >
+              <CardZoomBar
+                zoom={gameOverZoom.zoom}
+                onZoomOut={gameOverZoom.zoomOut}
+                onZoomIn={gameOverZoom.zoomIn}
+                onReset={gameOverZoom.resetZoom}
+              />
+              <div>
               {hud.isNewBest ? (
                 <div className="inline-block bg-amber-400 text-slate-950 text-[11px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-md mb-1.5">
                   নতুন রেকর্ড! • NEW HIGH SCORE!
@@ -1175,6 +1202,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               <span className="font-bengali text-lg font-extrabold">আবার খেলুন</span>
               <span className="text-xs uppercase tracking-wider">(RIDE AGAIN · R)</span>
             </button>
+            </div>
           </div>
         </div>
       )}
