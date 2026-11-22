@@ -10,8 +10,6 @@ import {
 
 export interface ProceduralTextureSet {
   road: THREE.CanvasTexture;
-  purbachalExpressRoad: THREE.CanvasTexture;
-  purbachalServiceRoad: THREE.CanvasTexture;
   cityRoad: THREE.CanvasTexture;
   zebra: THREE.CanvasTexture;
   sidewalk: THREE.CanvasTexture;
@@ -57,32 +55,6 @@ export interface ProceduralTextureSet {
   jokeSigns: THREE.Texture[];
   trafficControlSigns: THREE.CanvasTexture[];
   accidentSloganSign: THREE.CanvasTexture;
-  expresswayDeck: THREE.CanvasTexture;
-  expresswayTollSign: THREE.CanvasTexture;
-  rampEntranceSign: THREE.CanvasTexture;
-  turagRiverWater: THREE.CanvasTexture;
-  ijtemaSign: THREE.CanvasTexture;
-  airportSign: THREE.CanvasTexture;
-  jagrataPlaqueSign: THREE.CanvasTexture;
-  mohakhaliTerminalSign: THREE.CanvasTexture;
-  purbachalArchSign: THREE.CanvasTexture;
-  neelaMarketSign: THREE.CanvasTexture;
-  neelaStallSigns: THREE.CanvasTexture[];
-  kanchanBridgeSign: THREE.CanvasTexture;
-  baluBridgeSign: THREE.CanvasTexture;
-  shitalakshyaWater: THREE.CanvasTexture;
-  bananiExitSign: THREE.CanvasTexture;
-  bananiRampPortalSign: THREE.CanvasTexture;
-  bananiExitDeckArrows: THREE.CanvasTexture;
-  kurilTurnSign: THREE.CanvasTexture;
-  kurilForkPortalSign: THREE.CanvasTexture;
-  kurilRampPortalSign: THREE.CanvasTexture;
-  armyCantonmentSign: THREE.CanvasTexture;
-  navyHqSign: THREE.CanvasTexture;
-  kurmitolaHospitalSign: THREE.CanvasTexture;
-  bashundharaSign: THREE.CanvasTexture;
-  housingBillboards: THREE.CanvasTexture[];
-  dhakaBypassSign: THREE.CanvasTexture;
   contactShadow: THREE.CanvasTexture;
   dispose: () => void;
 }
@@ -189,64 +161,6 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     ctx.fillRect(310, 0, 26, 512);
     ctx.fillRect(422, 0, 26, 512);
 
-    return track(finalizeColorTexture(c, aniso, 1, 16));
-  })();
-
-  // 1a-2. Purbachal 300ft 4-Lane Unidirectional Express Carriageway Asphalt
-  const purbachalExpressRoad = (() => {
-    const [c, ctx] = makeCanvas(512, 512);
-    ctx.fillStyle = '#272b33';
-    ctx.fillRect(0, 0, 512, 512);
-
-    for (let i = 0; i < 4200; i++) {
-      const x = (i * 79) % 512;
-      const y = (i * 191 + Math.floor(i / 5) * 17) % 512;
-      const v = 36 + ((i * 23) % 22);
-      ctx.fillStyle = `rgb(${v},${v + 2},${v + 5})`;
-      ctx.fillRect(x, y, 2, 2);
-    }
-
-    // Continuous outer edge stripes (white + yellow express median border)
-    ctx.fillStyle = '#facc15';
-    ctx.fillRect(10, 0, 10, 512);
-    ctx.fillRect(492, 0, 10, 512);
-
-    // 3 dashed white lane dividers = 4 wide express lanes!
-    ctx.fillStyle = '#f8fafc';
-    for (let y = 16; y < 512; y += 64) {
-      ctx.fillRect(128, y, 8, 36);
-      ctx.fillRect(252, y, 8, 36);
-      ctx.fillRect(376, y, 8, 36);
-    }
-
-    // Subtle tire tracks
-    ctx.fillStyle = 'rgba(15, 18, 22, 0.20)';
-    for (const tx of [54, 178, 304, 428]) {
-      ctx.fillRect(tx, 0, 24, 512);
-    }
-
-    return track(finalizeColorTexture(c, aniso, 1, 16));
-  })();
-
-  // 1a-3. Purbachal 300ft 2-Lane Outer Service Road Asphalt
-  const purbachalServiceRoad = (() => {
-    const [c, ctx] = makeCanvas(256, 256);
-    ctx.fillStyle = '#313640';
-    ctx.fillRect(0, 0, 256, 256);
-    for (let i = 0; i < 1200; i++) {
-      const x = (i * 59) % 256;
-      const y = (i * 109) % 256;
-      const v = 45 + ((i * 19) % 18);
-      ctx.fillStyle = `rgb(${v},${v + 2},${v + 5})`;
-      ctx.fillRect(x, y, 2, 2);
-    }
-    ctx.fillStyle = '#e2e8f0';
-    ctx.fillRect(8, 0, 6, 256);
-    ctx.fillRect(242, 0, 6, 256);
-    ctx.fillStyle = '#f8fafc';
-    for (let y = 12; y < 256; y += 64) {
-      ctx.fillRect(124, y, 7, 36);
-    }
     return track(finalizeColorTexture(c, aniso, 1, 16));
   })();
 
@@ -453,12 +367,12 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
 
     // Main Crisp Title
     ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 66px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('নিলয় হিরো ফ্ল্যাগশিপ শোরুম • তেজগাঁও', 790, 92);
+    ctx.font = 'bold 72px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('নিলয় হিরো শোরুম • নিলয় মোটরস লি.', 790, 96);
 
     ctx.fillStyle = '#f8fafc';
-    ctx.font = 'bold 28px "Chakra Petch", sans-serif';
-    ctx.fillText('88 SHAHID TAJUDDIN AHMED AVE, TEJGAON, DHAKA 1208  •  NILOY MOTORS LTD.', 790, 180);
+    ctx.font = 'bold 32px "Chakra Petch", sans-serif';
+    ctx.fillText('NILOY HERO FLAGSHIP SHOWROOM  •  UPGRADE & SUPERBIKE HUB', 790, 182);
     return track(finalizeColorTexture(c, aniso));
   })();
 
@@ -492,16 +406,16 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     ctx.fillText('স্বাগতম', 105, 166);
 
     ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 48px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('নিলয় হিরো • ৮৮ শহীদ তাজউদ্দিন এভিনিউ', 595, 84);
+    ctx.font = 'bold 54px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('নিলয় হিরো শোরুম ও আপগ্রেড', 595, 86);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 32px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('১,০০,০০০-এ এক্সট্রিম ১৬০আর  •  ২,০০,০০০-এ কারিজমা ২১০!', 595, 160);
+    ctx.font = 'bold 34px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('১,০০,০০০-এ এক্সট্রিম ১৬০আর  •  ২,০০,০০০-এ কারিজমা ২১০!', 595, 162);
 
     ctx.fillStyle = '#4ade80';
-    ctx.font = 'bold 21px "Chakra Petch", sans-serif';
-    ctx.fillText('TEJGAON FLAGSHIP HUB  •  HIGHWAY TO GAZIPUR & MRT-6', 595, 212);
+    ctx.font = 'bold 22px "Chakra Petch", sans-serif';
+    ctx.fillText('BIGGER SMASH  •  MORE FUEL  •  LONGER COMBO & NITRO', 595, 212);
     return track(finalizeColorTexture(c, aniso));
   })();
 
@@ -586,9 +500,9 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
 
   // 7. Official DMTCL MRT Line-6 Real Station Boards
   const stationDefs = [
-    { bn: 'উত্তরা উত্তর (দিয়াবাড়ি)', en: 'UTTARA NORTH (DIABARI) • ঢাকা মেট্রো রেল (MRT-6)' },
-    { bn: 'মিরপুর-১০ স্টেশন', en: 'MIRPUR-10 • ঢাকা মেট্রো রেল (MRT-6)' },
-    { bn: 'ফার্মগেট স্টেশন', en: 'FARMGATE • তেজগাঁও সংযোগ • ঢাকা মেট্রো রেল (MRT-6)' },
+    { bn: 'ফার্মগেট স্টেশন', en: 'FARMGATE • ঢাকা মেট্রো রেল (MRT-6)' },
+    { bn: 'শাহবাগ স্টেশন', en: 'SHAHBAG • ঢাকা মেট্রো রেল (MRT-6)' },
+    { bn: 'মতিঝিল স্টেশন', en: 'MOTIJHEEL • ঢাকা মেট্রো রেল (MRT-6)' },
   ];
   const metroStationBoards = stationDefs.map((st) => {
     const [c, ctx] = makeCanvas(1024, 224);
@@ -697,11 +611,11 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 46px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('তেজগাঁও ⇄ গাজীপুর ⇄ পূর্বাচল ⇄ কাঞ্চন ব্রিজ', 512, 74);
+    ctx.font = 'bold 52px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('স্বাগতম ঢাকা • হিরো রাস্তার রাজা', 512, 74);
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 23px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('মহাখালী এক্সপ্রেসওয়ে • বিমানবন্দর • ৩০০ ফিট • নীলা মার্কেট • মেট্রোরেল', 512, 138);
+    ctx.font = 'bold 26px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('নিটল-নিলয় সিটি • সব নিয়ম ভেঙ্গে ঝড়ের বেগে এগিয়ে চলুন!', 512, 138);
     return track(finalizeColorTexture(c, aniso));
   })();
 
@@ -740,10 +654,10 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     ctx.fillText('নিটল-নিলয়', 128, 48);
     ctx.fillStyle = '#fde047';
     ctx.font = 'bold 28px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('ডিটিএ • ঢাকাতে আছি', 128, 126);
+    ctx.fillText('হিরো রাস্তার রাজা', 128, 126);
     ctx.fillStyle = '#38bdf8';
-    ctx.font = 'bold 21px "Chakra Petch", "Noto Sans Bengali", sans-serif';
-    ctx.fillText('DTA - DHAKA TE ACHI', 128, 188);
+    ctx.font = 'bold 22px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('নিয়ম ভেঙে এগিয়ে চলো!', 128, 188);
     return track(finalizeColorTexture(c, aniso));
   })();
 
@@ -1122,643 +1036,6 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     return track(finalizeColorTexture(c, aniso));
   })();
 
-  // 19d. Elevated Expressway & Flyover Asphalt Deck Texture
-  const expresswayDeck = (() => {
-    const [c, ctx] = makeCanvas(512, 512);
-    ctx.fillStyle = '#1f2937';
-    ctx.fillRect(0, 0, 512, 512);
-    for (let i = 0; i < 3600; i++) {
-      const x = (i * 67) % 512;
-      const y = (i * 193) % 512;
-      const v = 30 + ((i * 23) % 20);
-      ctx.fillStyle = `rgb(${v},${v + 4},${v + 10})`;
-      ctx.fillRect(x, y, 2, 2);
-    }
-    ctx.fillStyle = '#f8fafc';
-    ctx.fillRect(14, 0, 10, 512);
-    ctx.fillRect(488, 0, 10, 512);
-    ctx.fillStyle = '#facc15';
-    ctx.fillRect(242, 0, 7, 512);
-    ctx.fillRect(263, 0, 7, 512);
-    ctx.fillStyle = '#e2e8f0';
-    for (let y = 16; y < 512; y += 64) {
-      ctx.fillRect(128, y, 8, 36);
-      ctx.fillRect(376, y, 8, 36);
-    }
-    return track(finalizeColorTexture(c, aniso, 1, 10));
-  })();
-
-  // 19e. Dhaka Elevated Expressway Toll Plaza Canopy Sign
-  const expresswayTollSign = (() => {
-    const [c, ctx] = makeCanvas(1024, 224);
-    const grad = ctx.createLinearGradient(0, 0, 1024, 0);
-    grad.addColorStop(0, '#0f172a');
-    grad.addColorStop(0.5, '#1e3a8a');
-    grad.addColorStop(1, '#0f172a');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 1024, 224);
-    ctx.fillStyle = '#facc15';
-    ctx.fillRect(0, 0, 1024, 12);
-    ctx.fillRect(0, 212, 1024, 12);
-    ctx.fillStyle = '#dc2626';
-    ctx.fillRect(24, 34, 180, 156);
-    ctx.strokeStyle = '#fde047';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(24, 34, 180, 156);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 42px "Chakra Petch", sans-serif';
-    ctx.fillText('DEE', 114, 96);
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 22px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('ফাস্ট-ট্র্যাক', 114, 150);
-
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 54px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('ঢাকা এলিভেটেড এক্সপ্রেসওয়ে', 610, 82);
-    ctx.fillStyle = '#4ade80';
-    ctx.font = 'bold 30px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('মহাখালী ➔ কাওলা বিমানবন্দর • ফ্রি ফাস্ট-ট্র্যাক!', 610, 156);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19f. Elevated Ramp Entrance Portal Sign
-  const rampEntranceSign = (() => {
-    const [c, ctx] = makeCanvas(512, 160);
-    ctx.fillStyle = '#065f46';
-    ctx.fillRect(0, 0, 512, 160);
-    ctx.strokeStyle = '#fde047';
-    ctx.lineWidth = 8;
-    ctx.strokeRect(6, 6, 500, 148);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 36px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('▲ এলিভেটেড র‍্যাম্প ↑', 256, 54);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('বাম/ডান র‍্যাম্প দিয়ে উপরে উঠুন • FLYOVER', 256, 114);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19g. Turag River Water Surface
-  const turagRiverWater = (() => {
-    const [c, ctx] = makeCanvas(512, 256);
-    const grad = ctx.createLinearGradient(0, 0, 512, 256);
-    grad.addColorStop(0, '#0369a1');
-    grad.addColorStop(0.5, '#0284c7');
-    grad.addColorStop(1, '#0d9488');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 512, 256);
-    ctx.fillStyle = 'rgba(186, 230, 253, 0.25)';
-    for (let y = 14; y < 256; y += 22) {
-      for (let x = (y % 44 === 14 ? 10 : 35); x < 500; x += 68) {
-        ctx.fillRect(x, y, 34, 4);
-      }
-    }
-    return track(finalizeColorTexture(c, aniso, 10, 2));
-  })();
-
-  // 19h. Bishwa Ijtema Ground Banner Sign (Tongi Turag Bank)
-  const ijtemaSign = (() => {
-    const [c, ctx] = makeCanvas(640, 192);
-    ctx.fillStyle = '#064e3b';
-    ctx.fillRect(0, 0, 640, 192);
-    ctx.strokeStyle = '#fde047';
-    ctx.lineWidth = 10;
-    ctx.strokeRect(8, 8, 624, 176);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 46px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('বিশ্ব ইজতেমা ময়দান • টঙ্গী', 320, 74);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 26px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('তুরাগ নদীর তীর • BISHWA IJTEMA GROUND', 320, 138);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19i. Hazrat Shahjalal International Airport (Kawla) Sign
-  const airportSign = (() => {
-    const [c, ctx] = makeCanvas(640, 192);
-    ctx.fillStyle = '#1e3a8a';
-    ctx.fillRect(0, 0, 640, 192);
-    ctx.fillStyle = '#facc15';
-    ctx.fillRect(0, 0, 640, 14);
-    ctx.fillRect(0, 178, 640, 14);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 36px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('✈ হযরত শাহজালাল আন্তর্জাতিক বিমানবন্দর', 320, 74);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px "Chakra Petch", sans-serif';
-    ctx.fillText('HAZRAT SHAHJALAL INTL AIRPORT • KAWLA, DHAKA', 320, 136);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19j. Jagrata Chourangi (Gazipur Chourasta) Monument Plaque
-  const jagrataPlaqueSign = (() => {
-    const [c, ctx] = makeCanvas(512, 192);
-    ctx.fillStyle = '#7f1d1d';
-    ctx.fillRect(0, 0, 512, 192);
-    ctx.strokeStyle = '#fde047';
-    ctx.lineWidth = 10;
-    ctx.strokeRect(8, 8, 496, 176);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 44px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('জাগ্রত চৌরঙ্গী • ১৯৭১', 256, 70);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 24px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('গাজীপুর চৌরাস্তা • চন্দনা মোড়', 256, 132);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19k. Mohakhali Bus Terminal Sign
-  const mohakhaliTerminalSign = (() => {
-    const [c, ctx] = makeCanvas(768, 224);
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(0, 0, 768, 224);
-    ctx.fillStyle = '#dc2626';
-    ctx.fillRect(0, 0, 768, 24);
-    ctx.fillRect(0, 200, 768, 24);
-    ctx.strokeStyle = '#facc15';
-    ctx.lineWidth = 8;
-    ctx.strokeRect(12, 30, 744, 164);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 52px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('মহাখালী বাস টার্মিনাল • ঢাকা', 384, 88);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 26px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('MOHAKHALI BUS TERMINAL • এলিভেটেড এক্সপ্রেসওয়ে মুখ ↑', 384, 152);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19l. Purbachal 300 Feet Road Welcome Arch Sign
-  const purbachalArchSign = (() => {
-    const [c, ctx] = makeCanvas(1024, 224);
-    const grad = ctx.createLinearGradient(0, 0, 1024, 0);
-    grad.addColorStop(0, '#065f46');
-    grad.addColorStop(0.5, '#047857');
-    grad.addColorStop(1, '#0f766e');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 1024, 224);
-    ctx.strokeStyle = '#fde047';
-    ctx.lineWidth = 10;
-    ctx.strokeRect(10, 10, 1004, 204);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 54px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('পূর্বাচল ৩০০ ফিট রোড • ৩৬ জুলাই এক্সপ্রেসওয়ে', 512, 78);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 28px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('বালু সেতু ➔ নীলা মার্কেট ➔ নারায়ণগঞ্জ কাঞ্চন ব্রিজ', 512, 152);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19m. Neela Market Main Overhead & Facade Banner
-  const neelaMarketSign = (() => {
-    const [c, ctx] = makeCanvas(896, 224);
-    ctx.fillStyle = '#7c2d12';
-    ctx.fillRect(0, 0, 896, 224);
-    ctx.fillStyle = '#f59e0b';
-    ctx.fillRect(0, 0, 896, 20);
-    ctx.fillRect(0, 204, 896, 20);
-    ctx.strokeStyle = '#fef08a';
-    ctx.lineWidth = 8;
-    ctx.strokeRect(14, 28, 868, 168);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 54px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('নীলা মার্কেট • পূর্বাচল ৩০০ ফিট', 448, 86);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 28px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('গরম হাঁসের মাংস • ভাপা-চিতই পিঠা • চায়ের আড্ডা (NEELA MARKET)', 448, 152);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19n. Neela Market Individual Food Stall Banners
-  const neelaStallDefs = [
-    { title: 'মামা হাঁসের মাংস ও ভুনা', sub: 'গরম চালের রুটি ও কালো ভুনা • পূর্বাচল', bg: '#991b1b' },
-    { title: 'নীলা পিঠা ও বিরিয়ানি ঘর', sub: 'ভাপা • চিতই • পাটিসাপটা • দুধ চা', bg: '#065f46' },
-    { title: '৩০০ ফিট কাবাব ও ফুচকা কর্নার', sub: 'নিরিবিলি খোলা আকাশ • নীলা মার্কেট', bg: '#1e3a8a' },
-  ];
-  const neelaStallSigns = neelaStallDefs.map((st) => {
-    const [c, ctx] = makeCanvas(512, 160);
-    ctx.fillStyle = st.bg;
-    ctx.fillRect(0, 0, 512, 160);
-    ctx.strokeStyle = '#fde047';
-    ctx.lineWidth = 8;
-    ctx.strokeRect(6, 6, 500, 148);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 34px "Noto Sans Bengali", sans-serif';
-    ctx.fillText(st.title, 256, 56);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px "Noto Sans Bengali", sans-serif';
-    ctx.fillText(st.sub, 256, 114);
-    return track(finalizeColorTexture(c, aniso));
-  });
-
-  // 19o. Narayanganj Kanchan Bridge Portal Sign
-  const kanchanBridgeSign = (() => {
-    const [c, ctx] = makeCanvas(896, 224);
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(0, 0, 896, 224);
-    ctx.fillStyle = '#dc2626';
-    ctx.fillRect(0, 0, 896, 22);
-    ctx.fillStyle = '#059669';
-    ctx.fillRect(0, 202, 896, 22);
-    ctx.strokeStyle = '#facc15';
-    ctx.lineWidth = 8;
-    ctx.strokeRect(14, 30, 868, 164);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 50px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('নারায়ণগঞ্জ কাঞ্চন ব্রিজ • শীতলক্ষ্যা নদী', 448, 86);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 26px "Chakra Petch", "Noto Sans Bengali", sans-serif';
-    ctx.fillText('NARAYANGANJ KANCHAN BRIDGE • রূপগঞ্জ ➔ তেজগাঁও রিটার্ন', 448, 150);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19p. Balu River Bridge Sign
-  const baluBridgeSign = (() => {
-    const [c, ctx] = makeCanvas(512, 160);
-    ctx.fillStyle = '#0369a1';
-    ctx.fillRect(0, 0, 512, 160);
-    ctx.strokeStyle = '#fde047';
-    ctx.lineWidth = 8;
-    ctx.strokeRect(6, 6, 500, 148);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 38px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('বালু নদী সেতু • পূর্বাচল', 256, 56);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('BALU RIVER BRIDGE • সামনে নীলা মার্কেট', 256, 114);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19q. Shitalakshya River Deep Emerald-Blue Water Texture
-  const shitalakshyaWater = (() => {
-    const [c, ctx] = makeCanvas(512, 256);
-    const grad = ctx.createLinearGradient(0, 0, 512, 256);
-    grad.addColorStop(0, '#0f766e');
-    grad.addColorStop(0.5, '#0284c7');
-    grad.addColorStop(1, '#065f46');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 512, 256);
-    ctx.fillStyle = 'rgba(207, 250, 254, 0.24)';
-    for (let y = 16; y < 256; y += 24) {
-      for (let x = (y % 48 === 16 ? 12 : 40); x < 500; x += 72) {
-        ctx.fillRect(x, y, 36, 4);
-      }
-    }
-    return track(finalizeColorTexture(c, aniso, 10, 2));
-  })();
-
-  // 19r. Banani Optional Exit Down-Ramp Overhead Gantry
-  const bananiExitSign = (() => {
-    const [c, ctx] = makeCanvas(896, 200);
-    ctx.fillStyle = '#065f46';
-    ctx.fillRect(0, 0, 896, 200);
-    ctx.fillStyle = '#facc15';
-    ctx.fillRect(0, 0, 896, 14);
-    ctx.fillRect(0, 186, 896, 14);
-    ctx.fillStyle = '#b91c1c';
-    ctx.fillRect(18, 24, 396, 152);
-    ctx.strokeStyle = '#fde047';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(18, 24, 396, 152);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 34px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('↙ বামে নামুন: বনানী এক্সিট ↓', 216, 76);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('কুর্মিটোলা • ৩০০ ফিট রোড (বাম পথ খোলা)', 216, 134);
-
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 36px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('সোজা ↑: কাওলা • বিমানবন্দর', 656, 76);
-    ctx.fillStyle = '#bbf7d0';
-    ctx.font = 'bold 22px "Chakra Petch", sans-serif';
-    ctx.fillText('STRAIGHT TO AIRPORT (DEE)', 656, 134);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19r-2. Banani Ramp Mouth Direct Portal Arch Sign
-  const bananiRampPortalSign = (() => {
-    const [c, ctx] = makeCanvas(640, 192);
-    ctx.fillStyle = '#064e3b';
-    ctx.fillRect(0, 0, 640, 192);
-    ctx.fillStyle = '#facc15';
-    ctx.fillRect(0, 0, 640, 12);
-    ctx.fillRect(0, 180, 640, 12);
-    ctx.strokeStyle = '#fde047';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(14, 20, 612, 152);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 42px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('↙ বনানী এক্সিট র‍্যাম্প ↓', 320, 74);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 24px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('নিচে নামুন • কুর্মিটোলা → ৩০০ ফিট', 320, 134);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19r-3. Transparent Pavement Left-Exit Arrows + Diagonal Warning Stripes
-  const bananiExitDeckArrows = (() => {
-    const [c, ctx] = makeCanvas(256, 512);
-    ctx.clearRect(0, 0, 256, 512);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    // Repeating bright amber curved exit chevrons pointing forward-left (top of canvas = -Z ahead)
-    const drawArrow = (cy: number) => {
-      ctx.save();
-      ctx.translate(128, cy);
-      ctx.rotate(-0.34);
-      ctx.fillStyle = '#facc15';
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 5;
-      ctx.beginPath();
-      ctx.moveTo(0, -48);
-      ctx.lineTo(42, -2);
-      ctx.lineTo(18, -2);
-      ctx.lineTo(18, 48);
-      ctx.lineTo(-18, 48);
-      ctx.lineTo(-18, -2);
-      ctx.lineTo(-42, -2);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-    };
-
-    drawArrow(96);
-    drawArrow(296);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 34px "Chakra Petch", sans-serif';
-    ctx.fillText('EXIT ↓', 128, 198);
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 34px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('বনানী ↓', 128, 408);
-
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = aniso;
-    tex.needsUpdate = true;
-    return track(tex);
-  })();
-
-  // 19s. Kuril Flyover / Kurmitola 90-degree Turn Portal Sign
-  const kurilTurnSign = (() => {
-    const [c, ctx] = makeCanvas(896, 200);
-    ctx.fillStyle = '#047857';
-    ctx.fillRect(0, 0, 896, 200);
-    ctx.strokeStyle = '#fde047';
-    ctx.lineWidth = 10;
-    ctx.strokeRect(10, 10, 876, 180);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 46px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('ডানে ৯০° মোড় ↱ পূর্বাচল ৩০০ ফিট', 448, 74);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 26px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('কুড়িল ফ্লাইওভার ➔ বালু নদী • নীলা মার্কেট • কাঞ্চন ব্রিজ', 448, 142);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19s-2. Kuril Fork Split Overhead Sign (Ramp to 300ft vs Straight to Gazipur)
-  const kurilForkPortalSign = (() => {
-    const [c, ctx] = makeCanvas(960, 210);
-    ctx.fillStyle = '#065f46';
-    ctx.fillRect(0, 0, 960, 210);
-    ctx.fillStyle = '#facc15';
-    ctx.fillRect(0, 0, 960, 14);
-    ctx.fillRect(0, 196, 960, 14);
-
-    // Left panel: Kuril Flyover Ramp -> 300ft
-    ctx.fillStyle = '#047857';
-    ctx.fillRect(20, 24, 445, 162);
-    ctx.strokeStyle = '#fde047';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(20, 24, 445, 162);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 34px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('↙ বাম র‍্যাম্পে উঠুন ↑ ৩০০ ফিট', 242, 78);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('বসুন্ধরা • নীলা মার্কেট • কাঞ্চন ব্রিজ', 242, 138);
-
-    // Right panel: Straight North -> Airport -> Gazipur
-    ctx.fillStyle = '#1e3a8a';
-    ctx.fillRect(492, 24, 448, 162);
-    ctx.strokeStyle = '#93c5fd';
-    ctx.strokeRect(492, 24, 448, 162);
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 36px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('সোজা ↑ গাজীপুর (সরাসরি)', 716, 78);
-    ctx.fillStyle = '#e0f2fe';
-    ctx.font = 'bold 22px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('বিমানবন্দর • উত্তরা • টঙ্গী • চৌরাস্তা', 716, 138);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19s-3. Direct Portal Arch over Kuril Up-Ramp Mouth
-  const kurilRampPortalSign = (() => {
-    const [c, ctx] = makeCanvas(640, 192);
-    ctx.fillStyle = '#065f46';
-    ctx.fillRect(0, 0, 640, 192);
-    ctx.fillStyle = '#facc15';
-    ctx.fillRect(0, 0, 640, 12);
-    ctx.fillRect(0, 180, 640, 12);
-    ctx.strokeStyle = '#fde047';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(14, 20, 612, 152);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 40px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('↱ কুড়িল ফ্লাইওভার র‍্যাম্প ↑', 320, 74);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 24px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('উপরে উঠে পূর্বাচল ৩০০ ফিট রাস্তায় নামুন', 320, 134);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19t. Dhaka Bypass (N105) Directional Sign
-  const dhakaBypassSign = (() => {
-    const [c, ctx] = makeCanvas(768, 192);
-    ctx.fillStyle = '#1e3a8a';
-    ctx.fillRect(0, 0, 768, 192);
-    ctx.strokeStyle = '#facc15';
-    ctx.lineWidth = 10;
-    ctx.strokeRect(8, 8, 752, 176);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 44px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('ঢাকা বাইপাস (N105) ↰ গাজীপুর চৌরাস্তা', 384, 72);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 24px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('রূপগঞ্জ ➔ ভোগড়া বাইপাস ➔ জাগ্রত চৌরঙ্গী', 384, 136);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19u. Army Cantonment, Navy HQ, Kurmitola General Hospital, Bashundhara R/A
-  const armyCantonmentSign = (() => {
-    const [c, ctx] = makeCanvas(640, 192);
-    ctx.fillStyle = '#14532d';
-    ctx.fillRect(0, 0, 640, 192);
-    ctx.fillStyle = '#dc2626';
-    ctx.fillRect(0, 0, 640, 16);
-    ctx.fillStyle = '#facc15';
-    ctx.fillRect(0, 176, 640, 16);
-    ctx.strokeStyle = '#fde047';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(14, 24, 612, 144);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 40px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('ঢাকা সেনানিবাস • আর্মি ক্যান্টনমেন্ট', 320, 74);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 24px "Chakra Petch", sans-serif';
-    ctx.fillText('BANGLADESH ARMY • DHAKA CANTONMENT', 320, 134);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  const navyHqSign = (() => {
-    const [c, ctx] = makeCanvas(640, 192);
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(0, 0, 640, 192);
-    ctx.fillStyle = '#0284c7';
-    ctx.fillRect(0, 0, 640, 18);
-    ctx.fillRect(0, 174, 640, 18);
-    ctx.strokeStyle = '#fde047';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(14, 24, 612, 144);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 38px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('⚓ বাংলাদেশ নৌবাহিনী সদর দপ্তর', 320, 74);
-    ctx.fillStyle = '#e0f2fe';
-    ctx.font = 'bold 24px "Chakra Petch", sans-serif';
-    ctx.fillText('BANGLADESH NAVY HEADQUARTERS • BANANI', 320, 134);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  const kurmitolaHospitalSign = (() => {
-    const [c, ctx] = makeCanvas(640, 192);
-    ctx.fillStyle = '#f8fafc';
-    ctx.fillRect(0, 0, 640, 192);
-    ctx.fillStyle = '#0d9488';
-    ctx.fillRect(0, 0, 640, 26);
-    ctx.fillRect(0, 166, 640, 26);
-    ctx.fillStyle = '#dc2626';
-    ctx.fillRect(34, 66, 22, 60);
-    ctx.fillRect(15, 85, 60, 22);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 34px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('কুর্মিটোলা জেনারেল হাসপাতাল', 360, 74);
-    ctx.fillStyle = '#0f766e';
-    ctx.font = 'bold 22px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('৫০০ শয্যাবিশিষ্ট • KURMITOLA GENERAL HOSPITAL', 360, 130);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  const bashundharaSign = (() => {
-    const [c, ctx] = makeCanvas(768, 200);
-    const grad = ctx.createLinearGradient(0, 0, 768, 0);
-    grad.addColorStop(0, '#0f172a');
-    grad.addColorStop(0.5, '#1e3a8a');
-    grad.addColorStop(1, '#0f172a');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 768, 200);
-    ctx.fillStyle = '#facc15';
-    ctx.fillRect(0, 0, 768, 12);
-    ctx.fillRect(0, 188, 768, 12);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 46px "Noto Sans Bengali", sans-serif';
-    ctx.fillText('বসুন্ধরা আবাসিক এলাকা (R/A)', 384, 78);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 24px "Chakra Petch", "Noto Sans Bengali", sans-serif';
-    ctx.fillText('BASHUNDHARA RESIDENTIAL AREA • ৩০০ ফিট সংলগ্ন', 384, 142);
-    return track(finalizeColorTexture(c, aniso));
-  })();
-
-  // 19v. Authentic Bangladeshi Real-Estate & Housing Company Billboards for 300ft Road
-  const housingBillboardDefs = [
-    { bg: '#064e3b', accent: '#facc15', badge: 'PLOT BOOKING', title: 'পূর্বাচল মেরিন সিটি', sub: '৩০০ ফিট হাইওয়ের পাশে • ৩ ও ৫ কাঠা প্লট' },
-    { bg: '#1e3a8a', accent: '#fbbf24', badge: 'BLOCK I • J • N', title: 'বসুন্ধরা আবাসিক এলাকা', sub: 'আধুনিক নাগরিক সুবিধা • ৩০০ ফিট সংলগ্ন' },
-    { bg: '#7f1d1d', accent: '#fde047', badge: 'READY PLOT', title: 'পূর্বাচল আমেরিকান সিটি', sub: 'এখনই বাড়ি করার উপযোগী • সহজ কিস্তি' },
-    { bg: '#14532d', accent: '#facc15', badge: 'ARMY HOUSING', title: 'জলসিঁড়ি আবাসন প্রকল্প', sub: 'সবুজে ঘেরা স্মার্ট সিটি • ৩০০ ফিট রোড' },
-    { bg: '#312e81', accent: '#38bdf8', badge: 'SWADESH PROPERTIES', title: 'সানভ্যালি আবাসন', sub: 'লেক ভিউ রেসিডেন্সিয়াল প্লট • বুকিং চলছে' },
-    { bg: '#7c2d12', accent: '#fde047', badge: 'PROBASHI PALLI', title: 'পূর্বাচল প্রবাসী পল্লী', sub: 'রেডি বিদ্যুৎ ও পাকা রাস্তা • এখনই সাব-কবলা' },
-    { bg: '#0f172a', accent: '#34d399', badge: 'SMART CITY', title: 'নীলাচল হাউজিং এস্টেট', sub: 'বালু ব্রিজ – কাঞ্চন সংলগ্ন প্রিমিয়াম প্লট' },
-    { bg: '#831843', accent: '#fde047', badge: 'CONCORD', title: 'পূর্বাচল কনকর্ড সিটি', sub: 'রাজউক পূর্বাচল সংলগ্ন • নির্ভেজাল জমি' },
-  ];
-  const housingBillboards = housingBillboardDefs.map((hb) => {
-    const [c, ctx] = makeCanvas(768, 360);
-    ctx.fillStyle = hb.bg;
-    ctx.fillRect(0, 0, 768, 360);
-    ctx.fillStyle = hb.accent;
-    ctx.fillRect(0, 0, 768, 16);
-    ctx.fillRect(0, 344, 768, 16);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(18, 24, 732, 312);
-
-    // Top pill badge + hotline bar
-    ctx.fillStyle = hb.accent;
-    ctx.fillRect(38, 42, 260, 46);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 24px "Chakra Petch", sans-serif';
-    ctx.fillText(hb.badge, 168, 65);
-
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = 'bold 22px "Chakra Petch", sans-serif';
-    ctx.fillText('HOTLINE: 16244', 724, 65);
-
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 58px "Noto Sans Bengali", sans-serif';
-    ctx.fillText(hb.title, 384, 174, 700);
-
-    ctx.fillStyle = hb.accent;
-    ctx.font = 'bold 30px "Noto Sans Bengali", sans-serif';
-    ctx.fillText(hb.sub, 384, 274, 700);
-    return track(finalizeColorTexture(c, aniso));
-  });
-
   // 20. Contact shadow
   const contactShadow = (() => {
     const [c, ctx] = makeCanvas(128, 128);
@@ -1775,8 +1052,6 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
 
   return {
     road: roadTex,
-    purbachalExpressRoad,
-    purbachalServiceRoad,
     cityRoad: cityRoadTex,
     zebra: zebraTex,
     sidewalk: sidewalkTex,
@@ -1822,32 +1097,6 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     jokeSigns,
     trafficControlSigns,
     accidentSloganSign,
-    expresswayDeck,
-    expresswayTollSign,
-    rampEntranceSign,
-    turagRiverWater,
-    ijtemaSign,
-    airportSign,
-    jagrataPlaqueSign,
-    mohakhaliTerminalSign,
-    purbachalArchSign,
-    neelaMarketSign,
-    neelaStallSigns,
-    kanchanBridgeSign,
-    baluBridgeSign,
-    shitalakshyaWater,
-    bananiExitSign,
-    bananiRampPortalSign,
-    bananiExitDeckArrows,
-    kurilTurnSign,
-    kurilForkPortalSign,
-    kurilRampPortalSign,
-    armyCantonmentSign,
-    navyHqSign,
-    kurmitolaHospitalSign,
-    bashundharaSign,
-    housingBillboards,
-    dhakaBypassSign,
     contactShadow,
     dispose: () => {
       allTextures.forEach((t) => t.dispose());
