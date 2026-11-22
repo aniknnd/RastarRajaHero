@@ -2936,6 +2936,7 @@ export class HeroRastarEngine {
       upcomingLightMeters: light.meters,
       sfxMuted: this.audio.isSfxMuted(),
       musicMuted: this.audio.isMusicMuted(),
+      motionStatus: this.motion.getStatus(),
     });
   }
 

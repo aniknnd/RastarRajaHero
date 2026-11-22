@@ -9,9 +9,11 @@
  * and re-maps the tilt axis for portrait / landscape screen orientations.
  */
 
-export type MotionStatus = 'off' | 'waiting' | 'active' | 'unsupported' | 'denied';
+import type { MotionStatus } from './types';
 
-type OrientationPermissionCtor = typeof DeviceOrientationEvent & {
+export type { MotionStatus };
+
+type PermissionCtor = typeof DeviceOrientationEvent & {
   requestPermission?: () => Promise<'granted' | 'denied' | 'default'>;
 };
 
@@ -62,14 +64,25 @@ export class MotionController {
   public async enable(): Promise<boolean> {
     if (this.enabled) return true;
     if (this.enabling) return false;
-    if (typeof window === 'undefined' || typeof window.DeviceOrientationEvent === 'undefined') {
+    if (typeof window === 'undefined') {
+      this.status = 'unsupported';
+      return false;
+    }
+    // DeviceOrientation is a secure-context feature: Chrome/Android and iOS
+    // Safari silently withhold sensor events over plain HTTP, which looks like
+    // "motion does nothing". Detect it up front and explain instead.
+    if (window.isSecureContext === false) {
+      this.status = 'insecure';
+      return false;
+    }
+    if (typeof window.DeviceOrientationEvent === 'undefined') {
       this.status = 'unsupported';
       return false;
     }
 
     this.enabling = true;
     try {
-      const ctor = window.DeviceOrientationEvent as OrientationPermissionCtor;
+      const ctor = window.DeviceOrientationEvent as PermissionCtor;
       if (typeof ctor.requestPermission === 'function') {
         try {
           const result = await ctor.requestPermission();

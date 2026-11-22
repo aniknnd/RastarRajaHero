@@ -58,6 +58,7 @@ const INITIAL_HUD: HudSnapshot = {
   upcomingLightMeters: 0,
   sfxMuted: false,
   musicMuted: false,
+  motionStatus: 'off',
 };
 
 export default function App() {
@@ -134,7 +135,9 @@ export default function App() {
     const enabled = await engine.enableMotionControl();
     if (!enabled) {
       const status = engine.getMotionStatus();
-      if (status === 'unsupported') {
+      if (status === 'insecure') {
+        engine.showNotice('HTTPS প্রয়োজন', 'মোশন সেন্সর শুধু HTTPS-এ কাজ করে — নিরাপদ URL দিয়ে খুলুন', 'warning');
+      } else if (status === 'unsupported') {
         engine.showNotice('মোশন কন্ট্রোল নেই', 'এই ব্রাউজারে ডিভাইস মুভমেন্ট সাপোর্ট করে না', 'warning');
       } else if (status === 'denied') {
         engine.showNotice('অনুমতি পাওয়া যায়নি', 'মোশন সেন্সর ব্যবহারের অনুমতি দিন', 'warning');
@@ -143,15 +146,16 @@ export default function App() {
     }
 
     setMotionActive(true);
+    engine.showNotice('মোশন কন্ট্রোল চালু', 'ফোন ডানে-বামে কাতিয়ে স্টিয়ার করুন', 'bonus');
 
     // No sensor samples on this device (e.g. desktop) — roll back gracefully.
     window.setTimeout(() => {
       if (engineRef.current === engine && engine.getMotionStatus() === 'waiting') {
         engine.disableMotionControl();
         setMotionActive(false);
-        engine.showNotice('মোশন সেন্সর পাওয়া যায়নি', 'ফোনে খুলুন অথবা টাচ কন্ট্রোল ব্যবহার করুন', 'warning');
+        engine.showNotice('মোশন সেন্সর পাওয়া যায়নি', 'ফোনে HTTPS দিয়ে খুলুন অথবা টাচ কন্ট্রোল ব্যবহার করুন', 'warning');
       }
-    }, 1400);
+    }, 2200);
   }, []);
 
   const handlePause = useCallback(() => {
@@ -187,6 +191,7 @@ export default function App() {
         musicMuted={musicMuted}
         showTouchControls={showTouchControls}
         motionActive={motionActive}
+        motionStatus={hud.motionStatus}
         onStart={handleStart}
         onToggleMute={handleToggleMute}
         onToggleSfxMute={handleToggleSfxMute}

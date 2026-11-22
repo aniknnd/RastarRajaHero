@@ -28,7 +28,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { BIKE_ORDER, BIKE_SPECS, GameState, type BikeTierId, type HudSnapshot } from '../game/types';
+import { BIKE_ORDER, BIKE_SPECS, GameState, type BikeTierId, type HudSnapshot, type MotionStatus } from '../game/types';
 
 interface GameHUDProps {
   hud: HudSnapshot;
@@ -37,6 +37,7 @@ interface GameHUDProps {
   musicMuted: boolean;
   showTouchControls: boolean;
   motionActive: boolean;
+  motionStatus: MotionStatus;
   onStart: () => void;
   onToggleMute: () => void;
   onToggleSfxMute: () => void;
@@ -295,6 +296,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   musicMuted,
   showTouchControls,
   motionActive,
+  motionStatus,
   onStart,
   onToggleMute,
   onToggleSfxMute,
@@ -959,7 +961,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           </div>
 
           {/* Signal + Mute + Touch Pad toggle on one compact line */}
-          <div className="flex items-center gap-1 pointer-events-auto">
+          <div className="flex flex-wrap items-center justify-end gap-1 pointer-events-auto max-w-full">
             {hud.upcomingLight && (
               <div className="bg-slate-950/82 border border-slate-600/80 rounded px-1.5 py-1 flex items-center gap-1 text-[9px] sm:text-[10px]">
                 <span
@@ -980,14 +982,40 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 e.currentTarget.blur();
                 onToggleMotion();
               }}
-              title={motionActive ? 'Motion Steering: On' : 'Motion Steering (tilt device)'}
+              title={
+                motionStatus === 'active'
+                  ? 'Motion Steering: On'
+                  : motionStatus === 'waiting'
+                    ? 'Motion: searching sensor…'
+                    : motionStatus === 'insecure'
+                      ? 'Motion needs HTTPS'
+                      : motionStatus === 'denied'
+                        ? 'Motion permission denied'
+                        : motionStatus === 'unsupported'
+                          ? 'Motion not supported'
+                          : 'Motion Steering (tilt device)'
+              }
               aria-pressed={motionActive}
               className={`bg-slate-950/82 border hover:border-amber-400 p-1 sm:p-1.5 rounded-md cursor-pointer ${
-                motionActive ? 'border-sky-300/80 shadow-[0_0_12px_rgba(56,189,248,0.55)]' : 'border-slate-600/80'
+                motionStatus === 'active'
+                  ? 'border-sky-300/80 shadow-[0_0_12px_rgba(56,189,248,0.55)]'
+                  : motionStatus === 'waiting'
+                    ? 'border-amber-300/80 shadow-[0_0_12px_rgba(251,191,36,0.5)]'
+                    : motionStatus === 'denied' || motionStatus === 'unsupported' || motionStatus === 'insecure'
+                      ? 'border-red-400/70'
+                      : 'border-slate-600/80'
               }`}
             >
               <Smartphone
-                className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${motionActive ? 'text-sky-300' : 'text-slate-400'}`}
+                className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${
+                  motionStatus === 'active'
+                    ? 'text-sky-300'
+                    : motionStatus === 'waiting'
+                      ? 'text-amber-300 animate-pulse'
+                      : motionStatus === 'denied' || motionStatus === 'unsupported' || motionStatus === 'insecure'
+                        ? 'text-red-400'
+                        : 'text-slate-400'
+                }`}
               />
             </button>
             <button

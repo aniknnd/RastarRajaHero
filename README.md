@@ -47,9 +47,11 @@ A stylized, mobile-first 3D Dhaka-inspired motorcycle arcade game branded for **
 
 ### Motion (Device Tilt)
 - Tap the **smartphone icon** in the top-right dock to toggle **motion steering**. Hold the phone comfortably, then **roll it left/right to steer** — no on-screen steering buttons required (the touch steering buttons still take priority while held).
-- On iOS 13+ the browser shows a motion-access permission prompt the first time; the ride must be served over **HTTPS** (or `localhost`) for motion events to fire.
+- **Requires HTTPS** (or `localhost`). Mobile browsers only deliver `deviceorientation` sensor events in a secure context, so a plain `http://vps-ip:3005/...` URL silently blocks tilt — the bike will not turn. Put the game behind HTTPS (Caddy / nginx + Let's Encrypt) or expose it through a quick HTTPS tunnel (`cloudflared tunnel --url http://localhost:3005`, `npx localtunnel --port 3005`) and open that `https://` URL on the phone.
+- On iOS 13+ the browser shows a motion-access permission prompt the first time; tap **Allow**.
+- The dock icon reports state: **amber + pulsing** = waiting for sensor data, **sky blue** = active, **red** = unsupported / permission denied / not a secure context. A Bengali toast also explains any failure.
 - A short neutral calibration is captured whenever motion mode is enabled, the ride starts, or the game resumes, so whatever angle you hold the phone at becomes "straight ahead". Tilt past ~32° in either direction for full steering lock.
-- Motion control is steering-only with **auto-throttle**: while tilt mode is live the bike keeps accelerating so you only lean the phone to steer. Hold **v পেছনে (REV/BRAKE)** or **হ্যান্ডব্রেক** to slow down; **বুস্ট (BOOST)** still needs its button (or Left Shift).
+- Motion control adds **auto-throttle** so you only tilt to steer. Hold **v পেছনে (REV/BRAKE)** or the handbrake to slow down; **বুস্ট (BOOST)** still needs its button (or Left Shift).
 
 ### Audio
 - **SFX** (engine, horns, impacts, voice lines) and **Music** (menu loop) can be muted independently from the pause menu or the top-right dock toggles.

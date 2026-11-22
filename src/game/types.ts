@@ -174,6 +174,8 @@ export interface HudMission {
   reward: number;
 }
 
+export type MotionStatus = 'off' | 'waiting' | 'active' | 'unsupported' | 'denied' | 'insecure';
+
 export interface HudSnapshot {
   gameState: GameState;
   score: number;
@@ -218,6 +220,7 @@ export interface HudSnapshot {
   upcomingLightMeters: number;
   sfxMuted: boolean;
   musicMuted: boolean;
+  motionStatus: MotionStatus;
 }
 
 export const GAME_CONFIG = {
