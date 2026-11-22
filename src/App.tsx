@@ -24,9 +24,9 @@ const INITIAL_HUD: HudSnapshot = {
   fuelCapacity: 100,
   isRefueling: false,
   isInFuelZone: false,
-  nearestPumpMeters: 342,
+  nearestPumpMeters: 592,
   isInShowroomZone: false,
-  nearestShowroomMeters: 30,
+  nearestShowroomMeters: 31,
   nextUnlockBikeId: 'xtreme_160r',
   combo: 1,
   comboTimerNorm: 0,
@@ -42,22 +42,22 @@ const INITIAL_HUD: HudSnapshot = {
   funnyMessage: null,
   latestPopup: null,
   mission: {
-    titleBn: 'গাড়ি চুরমার করুন',
+    titleBn: 'গাড়ি চুরমার করুন',
     progress: 0,
     target: 4,
     reward: 500,
   },
-  rankTitleBn: 'পাড়ার নতুন বাইকার',
+  rankTitleBn: 'পাড়ার নতুন বাইকার',
   screenFlashTone: 'none',
   gameOverReasonBn: '',
   gameOverReasonEn: '',
   gameOverRoastsBn: [],
   lapCount: 1,
-  zoneLabelBn: 'ফার্মগেট • ফার্মগেট মেট্রো',
+  zoneLabelBn: 'তেজগাঁও • নিলয় হিরো ফ্ল্যাগশিপ (৮৮ তাজউদ্দিন এভ.)',
+  isOnElevatedRoad: false,
+  turnCueBn: null,
   upcomingLight: null,
   upcomingLightMeters: 0,
-  sfxMuted: false,
-  musicMuted: false,
 };
 
 export default function App() {
@@ -66,8 +66,6 @@ export default function App() {
 
   const [hud, setHud] = useState<HudSnapshot>(INITIAL_HUD);
   const [muted, setMuted] = useState(false);
-  const [sfxMuted, setSfxMuted] = useState(false);
-  const [musicMuted, setMusicMuted] = useState(false);
   const [showTouchControls, setShowTouchControls] = useState(true);
 
   useEffect(() => {
@@ -95,18 +93,6 @@ export default function App() {
     setMuted(next);
   }, []);
 
-  const handleToggleSfxMute = useCallback(() => {
-    if (!engineRef.current) return;
-    const next = engineRef.current.toggleSfxMute();
-    setSfxMuted(next);
-  }, []);
-
-  const handleToggleMusicMute = useCallback(() => {
-    if (!engineRef.current) return;
-    const next = engineRef.current.toggleMusicMute();
-    setMusicMuted(next);
-  }, []);
-
   const handleToggleTouchControls = useCallback(() => {
     setShowTouchControls((prev) => {
       if (prev) {
@@ -118,14 +104,6 @@ export default function App() {
 
   const handleTouchControl = useCallback((control: keyof InputState, pressed: boolean) => {
     engineRef.current?.setTouchControl(control, pressed);
-  }, []);
-
-  const handlePause = useCallback(() => {
-    engineRef.current?.togglePause();
-  }, []);
-
-  const handleResume = useCallback(() => {
-    engineRef.current?.resumeGame();
   }, []);
 
   const handleOpenShowroom = useCallback(() => {
@@ -143,25 +121,19 @@ export default function App() {
   return (
     <main className="relative w-screen h-screen overflow-hidden bg-amber-950 select-none">
       {/* Isolated WebGL viewport container */}
-      <div ref={mountRef} className="absolute inset-0 w-full h-full touch-none" />
+      <div ref={mountRef} className="absolute inset-0 w-full h-full" />
 
       {/* Full-viewport Game Shell HUD */}
       <GameHUD
         hud={hud}
         muted={muted}
-        sfxMuted={sfxMuted}
-        musicMuted={musicMuted}
         showTouchControls={showTouchControls}
         onStart={handleStart}
         onToggleMute={handleToggleMute}
-        onToggleSfxMute={handleToggleSfxMute}
-        onToggleMusicMute={handleToggleMusicMute}
         onToggleTouchControls={handleToggleTouchControls}
         onOpenShowroom={handleOpenShowroom}
         onCloseShowroom={handleCloseShowroom}
         onSelectBike={handleSelectBike}
-        onTogglePause={handlePause}
-        onResumeGame={handleResume}
       />
 
       {/* Lower-center multi-touch driving cluster (BRAKE centered) */}

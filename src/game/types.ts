@@ -1,7 +1,6 @@
 export enum GameState {
   MENU = 'MENU',
   PLAYING = 'PLAYING',
-  PAUSE = 'PAUSE',
   SHOWROOM = 'SHOWROOM',
   CRASHED = 'CRASHED',
   GAME_OVER = 'GAME_OVER',
@@ -214,16 +213,108 @@ export interface HudSnapshot {
   gameOverRoastsBn: string[];
   lapCount: number;
   zoneLabelBn: string;
+  turnCueBn: string | null;
+  isOnElevatedRoad: boolean;
   upcomingLight: TrafficLightPhase | null;
   upcomingLightMeters: number;
-  sfxMuted: boolean;
-  musicMuted: boolean;
+}
+
+export interface ElevatedSpanDef {
+  id: 'elevated_expressway' | 'uttara_tongi_flyover';
+  labelBn: string;
+  startZ: number; // Northbound entry foot (-Z travel enters here)
+  deckStartZ: number; // Top of entry ramp
+  deckEndZ: number; // Start of exit ramp
+  endZ: number; // Exit foot back to ground
+  deckHeight: number;
+  rampLeftMinX: number;
+  rampLeftMaxX: number;
+  rampRightMinX: number;
+  rampRightMaxX: number;
+  deckMinX: number;
+  deckMaxX: number;
+  tollPlazaZ?: number;
+}
+
+export const ELEVATED_SPANS: readonly ElevatedSpanDef[] = [
+  {
+    id: 'elevated_expressway',
+    labelBn: 'ঢাকা এলিভেটেড এক্সপ্রেসওয়ে (মহাখালী → বিমানবন্দর)',
+    startZ: -220, // Starts right at Mohakhali Bus Terminal
+    deckStartZ: -282,
+    deckEndZ: -698,
+    endZ: -760, // Lands directly at Hazrat Shahjalal Int'l Airport (Kawla)
+    deckHeight: 6.2,
+    rampLeftMinX: -9.0,
+    rampLeftMaxX: -4.4,
+    rampRightMinX: 4.4,
+    rampRightMaxX: 9.0,
+    deckMinX: -8.9,
+    deckMaxX: 8.9,
+    tollPlazaZ: -580,
+  },
+  {
+    id: 'uttara_tongi_flyover',
+    labelBn: 'উত্তরা–টঙ্গী ফ্লাইওভার',
+    startZ: -1200,
+    deckStartZ: -1255,
+    deckEndZ: -1465,
+    endZ: -1520,
+    deckHeight: 5.8,
+    rampLeftMinX: -9.0,
+    rampLeftMaxX: -4.4,
+    rampRightMinX: 4.4,
+    rampRightMaxX: 9.0,
+    deckMinX: -8.9,
+    deckMaxX: 8.9,
+  },
+];
+
+export interface RiverChannelDef {
+  id: 'turag' | 'balu' | 'shitalakshya';
+  nameBn: string;
+  startZ: number;
+  endZ: number;
+}
+
+export const RIVER_CHANNELS: readonly RiverChannelDef[] = [
+  { id: 'turag', nameBn: 'তুরাগ নদী • টঙ্গী ব্রিজ', startZ: -1322, endZ: -1396 },
+  { id: 'balu', nameBn: 'বালু নদী • পূর্বাচল ৩০০ ফিট', startZ: -2026, endZ: -2054 },
+  { id: 'shitalakshya', nameBn: 'শীতলক্ষ্যা নদী • নারায়ণগঞ্জ কাঞ্চন ব্রিজ', startZ: -2282, endZ: -2356 },
+];
+
+export function sampleElevatedSpanHeight(
+  span: ElevatedSpanDef,
+  z: number
+): { y: number; slopeRad: number; zone: 'entry' | 'deck' | 'exit' | 'none' } {
+  if (z > span.startZ || z < span.endZ) {
+    return { y: 0, slopeRad: 0, zone: 'none' };
+  }
+  if (z >= span.deckStartZ) {
+    const len = span.startZ - span.deckStartZ;
+    const t = Math.min(1, Math.max(0, (span.startZ - z) / len));
+    const smooth = t * t * (3 - 2 * t);
+    const dydNegZ = (span.deckHeight * 6 * t * (1 - t)) / len;
+    return { y: span.deckHeight * smooth, slopeRad: Math.atan(dydNegZ), zone: 'entry' };
+  }
+  if (z >= span.deckEndZ) {
+    return { y: span.deckHeight, slopeRad: 0, zone: 'deck' };
+  }
+  const len = span.deckEndZ - span.endZ;
+  const t = Math.min(1, Math.max(0, (span.deckEndZ - z) / len));
+  const smooth = t * t * (3 - 2 * t);
+  const dydNegZ = -(span.deckHeight * 6 * t * (1 - t)) / len;
+  return { y: span.deckHeight * (1 - smooth), slopeRad: Math.atan(dydNegZ), zone: 'exit' };
+}
+
+export function getElevatedSpanById(id: ElevatedSpanDef['id']): ElevatedSpanDef | undefined {
+  return ELEVATED_SPANS.find((s) => s.id === id);
 }
 
 export const GAME_CONFIG = {
-  LOOP_LENGTH: 720, // 9 blocks * 80m seamless endless Dhaka loop
+  LOOP_LENGTH: 2880, // 36 blocks * 80m full Dhaka->Mohakhali->Expressway->Airport->Uttara->Tongi->Gazipur->Purbachal 300ft->Neela Market->Kanchan Bridge->MRT-6->Tejgaon loop
   BLOCK_LENGTH: 80,
-  BLOCK_COUNT: 9,
+  BLOCK_COUNT: 36,
   ARTERY_HALF_WIDTH: 9.6, // -9.6 to +9.6
   ARTERY_LANES: [-6.75, -3.25, 3.25, 6.75] as readonly number[], // Keep-left: -6.75/-3.25 go -Z; +3.25/+6.75 oncoming +Z
   AVENUE_LEFT_INNER_X: -34,
@@ -232,7 +323,13 @@ export const GAME_CONFIG = {
   AVENUE_RIGHT_OUTER_X: 62,
   WORLD_PERIMETER_X: 78,
   MEDIAN_HALF_WIDTH: 0.72,
-  INTERSECTION_Z_POSITIONS: [-200, -280, -520, -680] as readonly number[],
+  INTERSECTION_Z_POSITIONS: [-120, -440, -920, -1560, -1880, -2680] as readonly number[],
+  TURAG_RIVER_START_Z: -1322,
+  TURAG_RIVER_END_Z: -1396,
+  GAZIPUR_CHOURASTA_Z: -1800,
+  NEELA_MARKET_Z: -2120,
+  KANCHAN_BRIDGE_Z: -2319,
+  MRT_CORRIDOR_START_Z: -2480,
   FUEL_PAD_HALF_LENGTH: 11.5,
   FUEL_REFILL_MAX_SPEED_KMH: 24,
   FUEL_REFILL_RATE_PER_SEC: 55,
@@ -247,10 +344,9 @@ export const GAME_CONFIG = {
   MAX_REVERSE_MPS: 8.5,
   SPEED_KMH_FACTOR: 3.4,
   TRAFFIC_SPEED_BOOST: 1.25,
-  ARTERY_TRAFFIC_COUNT: 32,
-  CITY_TRAFFIC_COUNT: 28,
+  ARTERY_TRAFFIC_COUNT: 210,
+  CITY_TRAFFIC_COUNT: 34,
   HIGH_SPEED_MSG_THRESHOLD_KMH: 80,
-  TITAN_TRAFFIC_CAP: 5, // Max smashRank-3 Titans (double-decker/tanker/fire/army/monster) on the road at once
   BEST_SCORE_STORAGE_KEY: 'hero_rastar_raja_best_score_v2',
   HERO_BANK_STORAGE_KEY: 'hero_rastar_raja_bank_v1',
   UNLOCKED_BIKES_STORAGE_KEY: 'hero_rastar_raja_unlocked_bikes_v1',
@@ -685,17 +781,18 @@ export const VEHICLE_SPECS: Record<VehicleKind, VehicleSpec> = {
 export const FUNNY_BENGALI_MESSAGES: readonly string[] = [
   'আস্তে চালাও ভাই, তুমি স্পাইডার-ম্যান না!',
   'হিরো বাইক চালাও, গতি তো বাড়বেই—বউ-পোলাপানের কথাও ভাবো!',
-  'ভাই, মহাখালী-গুলিস্তান রাস্তাটা রেসিং ট্র্যাক না!',
-  'ব্রেকটা মনে আছে তো, হিরো?',
-  'হেলমেট শক্ত করে ধরো, রকেট হয়ে যাচ্ছ!',
-  'এত স্পিড! পেছনে কি ডিএমপি নাকি বউ?',
-  'রাস্তার রাজা মানেই উড়ালপঙ্খী না ভাই!',
+  'ভাই, বনানী র‍্যাম্পে বামে না নামলে এলিভেটেড এক্সপ্রেসওয়ে সোজা বিমানবন্দর চলে যাবে!',
+  'কুর্মিটোলা থেকে ডানে ৯০° বাঁক নিলেই পূর্বাচল ৩০০ ফিট ও নীলা মার্কেট!',
+  'হেলমেট শক্ত করে ধরো, উত্তরা–টঙ্গী ফ্লাইওভার দিয়ে উড়াল দিচ্ছ!',
+  'এত স্পিড! পেছনে কি ডিএমপি নাকি নীলা মার্কেটের হাঁসের মাংসের লোভ?',
+  'ডিটিএ - ঢাকাতে আছি! উড়ালপঙ্খী না ভাই—কাঞ্চন ব্রিজে ব্রেক ধরিও!',
   'একটি দুর্ঘটনা, সারা জীবনের কান্না—গতি কমাও হিরো!',
   'নিটল-নিলয় স্টাফ বাস দেখলে সালাম দিয়ে সাইড নাও!',
+  'কাঞ্চন ব্রিজ ➔ ঢাকা বাইপাস ➔ গাজীপুর ➔ মেট্রোরেল পথে তেজগাঁও শোরুমে ফেরো!',
 ];
 
 export const FUNNY_DEATH_LINES_BN: readonly string[] = [
-  'চড় খেয়ে রাস্তার রাজা এখন রাস্তার প্রজা!',
+  'চড় খেয়ে ঢাকাতে আছির হিরো এখন রাস্তার প্রজা!',
   'একটি দুর্ঘটনা, সারা জীবনের কান্না — ব্রেক ধরলে আজকে বাঁচতা!',
   'ভাই, বাসের সাথে হিরোগিরি করতে গিয়ে ফ্ল্যাট হয়ে গেলা!',
   'পাবলিকের মাইর দুনিয়ার বাইর—পরের বার ব্রেক চাপিও!',
@@ -708,11 +805,11 @@ export const FUNNY_DEATH_LINES_BN: readonly string[] = [
   'এমন ল্যান্ডিং করলা যে গুগল ম্যাপও বলছে: "রাস্তা হারিয়েছে!"',
   'ভ্যানগাড়ির আলু আর তোমার স্বপ্ন — দুটোই ছড়িয়ে গেল রাস্তায়!',
   'ডাবল-ডেকার বাস বললো: "ছোট ভাই, আগে বড় বাইক আনো!"',
-  'ফেসবুক লাইভে পাবলিক ক্যাপশন দিছে: "রাস্তার রাজার জরুরি বৈঠক!"',
+  'ফেসবুক লাইভে পাবলিক ক্যাপশন দিছে: "DTA জরুরি বৈঠক!"',
   'দোকানের কাকা জিজ্ঞেস করে: "ভাই, ডানায় চোট লাগে নাই তো?"',
   'হিরো বাইক তো মজবুত, কিন্তু রাস্তার খাম্বা আরও মজবুত!',
   'ভাই, এই স্টান্টের জন্য অস্কার না—এক কাপ আদা চা প্রাপ্য!',
-  'মহাখালী ফ্লাইওভারের কাকগুলোও তালি দিচ্ছে তোমার উড়াল দেখে!',
+  'টঙ্গী ফ্লাইওভারের কাকগুলোও তালি দিচ্ছে তোমার উড়াল দেখে!',
   'হর্ন বাজালেই রাস্তা খালি হয় না — মাঝে মাঝে ডানে-বামেও তাকাইও!',
   'আয়হায়! এক ধাক্কায় সব কম্বো শেষ, পকেটও খালি!',
   'বন্ধুরা বললো: "ভাই, তুই কি রাস্তা মাপতে বের হইছিস?"',
@@ -722,21 +819,21 @@ export const FUNNY_DEATH_LINES_BN: readonly string[] = [
   'এত জোরে চালানোর পর এখন পাদুকাও খুঁজে পাওয়া যাচ্ছে না!',
   'উড়ালপঙ্খী হতে গিয়ে সিএনজির বাম্পারে চুমু খেয়ে গেলা!',
   'এক সেকেন্ড আগেও হিরো ছিলা, এক ধাক্কায় পুরো জিরো!',
-  'ভাই, ব্রেক প্যাডেলটা কি শোরুমে রেখে আসছিলা?!',
-  'সার্ফিং করতে গেলা রাস্তায়—তাও আবার বাসের সামনে!',
+  'ভাই, ব্রেক প্যাডেলটা কি তেজগাঁও শোরুমে রেখে আসছিলা?!',
+  'সার্ফিং করতে গেলা গাজীপুর চৌরাস্তায়—তাও আবার বাসের সামনে!',
   'পাশের টংয়ের চা ঠান্ডা হয়ে গেল তোমার ওভারটেক দেখতে দেখতে!',
 ];
 
 export const GAME_OVER_PUBLIC_ROASTS_BN: readonly string[] = [
   'চায়ের মামা: "হাসতে হাসতে আমার দুধ-চা পড়ে গেল রে ভাই!"',
   'রিকশাওয়ালা চাচা: "বাবা, আমার তিন চাকার বেল শুনেও ব্রেক দিলা না!"',
-  'বাসের হেল্পার: "ওস্তাদ, বামে তো পুরো রানওয়ে খালি ছিল!"',
+  'বাসের হেল্পার: "ওস্তাদ, বামে তো পুরো এক্সপ্রেসওয়ে রানওয়ে খালি ছিল!"',
   'সিএনজি ড্রাইভার: "মামা, আজ মিটার ছাড়াই আকাশ ভ্রমণ হয়ে গেল!"',
   'পাশের আন্টি: "ও মাগো! ছেলেটা তো বাইক ছেড়ে সুপারম্যান হয়ে গেল!"',
   'ট্রাফিক সার্জেন্ট: "কেস লিখব কি ভাই, হাসিই তো থামতেসে না!"',
   'ফুচকা মামা: "ভাইয়ের এমন ফ্লাইট দেখে আমার টকও টক হয়ে গেছে!"',
   'ফেসবুক পাবলিক: "ভিডিও ভাইরাল! ক্যাপশন: ব্রেক কী জিনিস?"',
-  'শোরুমের গার্ড: "বস, আগে হেলমেট ঠিক করেন, তারপর হিরোগিরি!"',
+  'তেজগাঁও শোরুম গার্ড: "বস, আগে হেলমেট ঠিক করেন, তারপর হিরোগিরি!"',
   'মুরব্বি পথচারী: "একটি দুর্ঘটনা, সারা জীবনের কান্না — মনে রাইখো বাবা!"',
   'হকার ভাই: "ঝালমুড়ি লাগবে ভাই? পড়ার পর তো খিদা লাগার কথা!"',
   'স্কুলছাত্র: "ওয়াও আংকেল! সার্কাসের চেয়েও দারুণ জাম্প দিলেন!"',
@@ -745,7 +842,7 @@ export const GAME_OVER_PUBLIC_ROASTS_BN: readonly string[] = [
   'মেট্রোরেলের যাত্রী: "উপর থেকে দেখলাম — আজকের সেরা কমেডি শো!"',
   'বন্ধুমহল: "দোস্ত, তোর লাইসেন্স না—রকেট চালানোর পারমিট লাগবে!"',
   'পানের দোকানদার: "পান খাবা ভাই? ধাক্কা খেয়ে তো মুখ শুকায় গেছে!"',
-  'কাকের ঝাঁক: "কা কা! এই রাস্তায় আমরাই এর চেয়ে ভালো ল্যান্ড করি!"',
+  'তুরাগ পাড়ের কাক: "কা কা! ফ্লাইওভারে আমরাই এর চেয়ে ভালো ল্যান্ড করি!"',
 ];
 
 export const NITOL_NILOY_SIGNS: readonly {
@@ -756,18 +853,18 @@ export const NITOL_NILOY_SIGNS: readonly {
   accent: string;
 }[] = [
   {
+    title: 'নিলয় মোটরস লিমিটেড',
+    sub: '৮৮ শহীদ তাজউদ্দিন আহমেদ এভিনিউ • তেজগাঁও',
+    bg: '#991b1b',
+    fg: '#ffffff',
+    accent: '#facc15',
+  },
+  {
     title: 'নিটল-নিলয় গ্রুপ',
     sub: 'NITOL NILOY GROUP • হিরো অফিশিয়াল',
     bg: '#0f172a',
     fg: '#fde047',
     accent: '#dc2626',
-  },
-  {
-    title: 'নিলয় মোটরস লিমিটেড',
-    sub: 'হিরো মোটরসাইকেল শোরুম ও সার্ভিস',
-    bg: '#991b1b',
-    fg: '#ffffff',
-    accent: '#facc15',
   },
   {
     title: 'নিটল-নিলয় টাওয়ার • মহাখালী',
@@ -777,22 +874,22 @@ export const NITOL_NILOY_SIGNS: readonly {
     accent: '#38bdf8',
   },
   {
-    title: 'নিটল সিমেন্ট',
-    sub: 'মজবুত নির্মাণের ভরসা • ঢাকা',
+    title: 'উত্তরা – টঙ্গী – গাজীপুর হাব',
+    sub: 'নিটল সিমেন্ট • মজবুত নির্মাণের ভরসা',
     bg: '#065f46',
     fg: '#ffffff',
     accent: '#fde047',
   },
   {
-    title: 'নিটল ইন্স্যুরেন্স',
-    sub: 'নিরাপদ পথচলার সঙ্গী • গুলিস্তান শাখা',
+    title: 'নিটল ইন্স্যুরেন্স • গাজীপুর',
+    sub: 'নিরাপদ পথচলার সঙ্গী • চন্দনা চৌরাস্তা',
     bg: '#7c2d12',
     fg: '#fef3c7',
     accent: '#f59e0b',
   },
   {
     title: 'হাজী বিরিয়ানি ও মামা চা',
-    sub: 'গরম সিঙ্গারা • ফার্মগেট মোড়',
+    sub: 'গরম সিঙ্গারা • তেজগাঁও – উত্তরা – গাজীপুর',
     bg: '#111827',
     fg: '#f8fafc',
     accent: '#ef4444',
@@ -804,17 +901,17 @@ export const DHAKA_ROAD_SIGNS: readonly {
   sub: string;
   accent: string;
 }[] = [
-  { title: 'একটি দুর্ঘটনা', sub: 'সারা জীবনের কান্না • সাবধানে চালান!', accent: '#b91c1c' },
-  { title: 'ধীরে চলুন ভাই!', sub: 'বউ বাসায় অপেক্ষা করছে', accent: '#dc2626' },
-  { title: 'হর্ন দিয়েন না!', sub: 'বাজালেও জ্যাম ছুটবে না', accent: '#d97706' },
-  { title: 'আস্তে ওভারটেক!', sub: 'আগে নিটল ইন্স্যুরেন্স দেখুন', accent: '#2563eb' },
-  { title: 'রেসিং ট্র্যাক না!', sub: 'পাশের টংয়ে গরম চা ঠান্ডা হচ্ছে', accent: '#059669' },
-  { title: 'রং সাইডে ভাইরাল!', sub: 'পাবলিক ভিডিও করতেছে ভাই', accent: '#be123c' },
-  { title: 'হেলমেট মাথায় দিন!', sub: 'চুল নষ্ট হলেও মাথা বাঁচবে', accent: '#7c3aed' },
+  { title: 'বনানী এক্সিট ↙', sub: 'বামে নামলে কুর্মিটোলা → ৩০০ ফিট!', accent: '#059669' },
+  { title: 'ধীরে চলুন ভাই!', sub: 'এক্সপ্রেসওয়ে সোজা বিমানবন্দর (কাওলা) যাবে', accent: '#dc2626' },
+  { title: 'কুর্মিটোলা ৯০° বাঁক ↱', sub: 'ডানে ঘুরলেই পূর্বাচল ৩০০ ফিট রোড!', accent: '#059669' },
+  { title: 'হর্ন দিয়েন না!', sub: 'বাজালেও মহাখালী বাস টার্মিনাল জ্যাম ছুটবে না', accent: '#d97706' },
+  { title: 'আস্তে ওভারটেক!', sub: 'সামনে নীলা মার্কেট • হাঁসের মাংস রেডি', accent: '#2563eb' },
+  { title: 'কাঞ্চন ব্রিজ ➔ N105', sub: 'শীতলক্ষ্যা পেরিয়ে বামে ঢাকা বাইপাস!', accent: '#7c3aed' },
+  { title: 'রং সাইডে ভাইরাল!', sub: 'নীলা মার্কেটের কাস্টমার ভিডিও করতেছে!', accent: '#be123c' },
+  { title: 'গাজীপুর চৌরাস্তা!', sub: 'জাগ্রত চৌরঙ্গী পেরিয়ে বামে বোর্ড বাজার', accent: '#b91c1c' },
   { title: 'একটি দুর্ঘটনা', sub: 'সারা জীবনের কান্না • গতি কমান!', accent: '#dc2626' },
-  { title: 'মহাখালী জ্যাম সামনে!', sub: 'বাইক নিয়ে গলি দিয়ে কাটান', accent: '#0284c7' },
-  { title: 'গুলিস্তান চত্বর সাবধান!', sub: 'বাস দেখলে হিরোগিরি কম করুন', accent: '#b91c1c' },
-  { title: 'উড়ালপঙ্খী মোড অফ!', sub: 'এটা হিরো বাইক, রকেট না', accent: '#c2410c' },
+  { title: 'উত্তরা–টঙ্গী ফ্লাইওভার!', sub: 'উপরে উড়াল দিন • নিচে তুরাগ নদী', accent: '#0284c7' },
+  { title: 'বিমানবন্দর ➔ দিয়াবাড়ি', sub: 'ডানে ঘুরলেই উত্তরা উত্তর মেট্রো (MRT-6)', accent: '#0f766e' },
   { title: 'বাম লেনে থাকুন!', sub: 'ডান দিক থেকে স্টাফ বাস আসছে', accent: '#0f766e' },
 ];
 
@@ -825,34 +922,52 @@ export const DHAKA_DIRECTION_SIGNS: readonly {
   bg: string;
 }[] = [
   {
-    topLine: '⬆ মহাখালী ২ কি.মি.  •  গুলশান-১',
-    midLine: '⬅ মিরপুর-১০  |  তেজগাঁও ➡',
-    bottomLine: 'MOHAKHALI  •  GULSHAN  •  TEJGAON',
+    topLine: '⬆ মহাখালী বাস টার্মিনাল • সাতরাস্তা',
+    midLine: '⬅ তেজগাঁও (৮৮ শহীদ তাজউদ্দিন এভি.)  |  নাবিস্কো ➡',
+    bottomLine: 'TEJGAON HERO SHOWROOM  •  MOHAKHALI TERMINAL',
     bg: '#065f46',
   },
   {
-    topLine: '⬆ ফার্মগেট  •  কারওয়ান বাজার',
-    midLine: '⬅ ধানমন্ডি-২৭  |  হাতিরঝিল ➡',
-    bottomLine: 'FARMGATE  •  DHANMONDI  •  HATIRJHEEL',
+    topLine: '⬆ ঢাকা এলিভেটেড এক্সপ্রেসওয়ে ↑ (মহাখালী এন্ট্রি)',
+    midLine: '↙ বনানী এক্সিট (৩০০ ফিট)  |  সোজা: কাওলা বিমানবন্দর ⬆',
+    bottomLine: 'BANANI DOWN-RAMP TO KURMITOLA  •  MAINLINE TO AIRPORT',
     bg: '#1e3a8a',
   },
   {
-    topLine: '⬆ শাহবাগ  •  ঢাকা বিশ্ববিদ্যালয়',
-    midLine: '⬅ নিউমার্কেট  |  পল্টন ➡',
-    bottomLine: 'SHAHBAG  •  NEW MARKET  •  PALTAN',
-    bg: '#065f46',
+    topLine: '↱ কুর্মিটোলা ৯০° বাঁক: পূর্বাচল ৩০০ ফিট রোড',
+    midLine: '⬆ কুড়িল ফ্লাইওভার  |  বালু সেতু • নীলা মার্কেট • কাঞ্চন ব্রিজ ↱',
+    bottomLine: 'KURMITOLA / KURIL 90-DEG TURN  •  PURBACHAL 300FT',
+    bg: '#047857',
   },
   {
-    topLine: '⬆ গুলিস্তান জিরো পয়েন্ট  •  মতিঝিল',
-    midLine: '⬅ সদরঘাট  |  কমলাপুর ➡',
-    bottomLine: 'GULISTAN  •  MOTIJHEEL  •  SADARGHAT',
+    topLine: '⬆ নারায়ণগঞ্জ কাঞ্চন ব্রিজ • শীতলক্ষ্যা নদী',
+    midLine: '⬅ পূর্বাচল নীলা মার্কেট  |  বামে ৯০°: ঢাকা বাইপাস (N105) ↰',
+    bottomLine: 'KANCHAN BRIDGE  •  LEFT TO DHAKA BYPASS (N105)',
     bg: '#1e3a8a',
   },
   {
-    topLine: '⬆ উত্তরা উত্তর  •  এয়ারপোর্ট রোড',
-    midLine: '⬅ আগারগাঁও  |  বনানী ➡',
-    bottomLine: 'UTTARA  •  AIRPORT  •  BANANI',
+    topLine: '⬆ ঢাকা বাইপাস (N105) • ভোগড়া ↰ গাজীপুর চৌরাস্তা',
+    midLine: '⬅ রূপগঞ্জ • কাঞ্চন  |  জাগ্রত চৌরঙ্গী • বোর্ড বাজার ↰',
+    bottomLine: 'DHAKA BYPASS N105  •  BHOGRA TO GAZIPUR CHOURASTA',
     bg: '#065f46',
+  },
+  {
+    topLine: '⬆ বোর্ড বাজার ➔ টঙ্গী ➔ উত্তরা–টঙ্গী ফ্লাইওভার',
+    midLine: '⬅ গাজীপুর হিরো হাব  |  তুরাগ নদী • বিশ্ব ইজতেমা ⬆',
+    bottomLine: 'BOARD BAZAR  •  UTTARA-TONGI FLYOVER  •  AIRPORT',
+    bg: '#1e3a8a',
+  },
+  {
+    topLine: '↱ হযরত শাহজালাল বিমানবন্দর • উত্তরা উত্তর (দিয়াবাড়ি)',
+    midLine: '⬆ উত্তরা  |  ডানে ৯০° মোড়: ঢাকা মেট্রোরেল (MRT-6) ↱',
+    bottomLine: 'DHAKA AIRPORT  •  TURN RIGHT TO DIABARI MRT-6',
+    bg: '#065f46',
+  },
+  {
+    topLine: '⬆ ঢাকা মেট্রো রেল (MRT-6) 🚇 • তেজগাঁও ফিরুন',
+    midLine: '⬅ মিরপুর-১০ • ফার্মগেট  |  বিজয় সরণি • তেজগাঁও শোরুম ↰',
+    bottomLine: 'DHAKA METRO RAIL (MRT-6)  •  VIJAY SARANI TO TEJGAON',
+    bg: '#0f766e',
   },
 ];
 
@@ -886,7 +1001,7 @@ export const REAL_TRAFFIC_SIGNS: readonly {
   border: string;
 }[] = [
   { badge: 'STOP', title: 'থামুন • লাল বাতি', sub: 'সামনে ক্রসিং • CROSSWALK', bg: '#991b1b', border: '#ffffff' },
-  { badge: 'LEFT', title: 'বাম লেনে চলুন', sub: 'KEEP LEFT • রিকশা ও সাইকেল বামে', bg: '#1e3a8a', border: '#fde047' },
+  { badge: 'LEFT', title: 'বাম লেনে চলুন', sub: 'KEEP LEFT • র‍্যাম্প ও সাইকেল বামে', bg: '#1e3a8a', border: '#fde047' },
   { badge: '40', title: 'সর্বোচ্চ গতি ৪০', sub: 'হিরো বাইকারদের জন্য প্রযোজ্য নয়!', bg: '#ffffff', border: '#dc2626' },
   { badge: 'MRT-6', title: 'সামনে মেট্রো স্টেশন', sub: 'চলন্ত সিঁড়ি ও যাত্রী পারাপার', bg: '#065f46', border: '#4ade80' },
 ];
