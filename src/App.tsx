@@ -69,6 +69,7 @@ export default function App() {
   const [sfxMuted, setSfxMuted] = useState(false);
   const [musicMuted, setMusicMuted] = useState(false);
   const [showTouchControls, setShowTouchControls] = useState(true);
+  const [motionActive, setMotionActive] = useState(false);
 
   useEffect(() => {
     const container = mountRef.current;
@@ -120,6 +121,39 @@ export default function App() {
     engineRef.current?.setTouchControl(control, pressed);
   }, []);
 
+  const handleToggleMotion = useCallback(async () => {
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    if (engine.getMotionStatus() !== 'off') {
+      engine.disableMotionControl();
+      setMotionActive(false);
+      return;
+    }
+
+    const enabled = await engine.enableMotionControl();
+    if (!enabled) {
+      const status = engine.getMotionStatus();
+      if (status === 'unsupported') {
+        engine.showNotice('মোশন কন্ট্রোল নেই', 'এই ব্রাউজারে ডিভাইস মুভমেন্ট সাপোর্ট করে না', 'warning');
+      } else if (status === 'denied') {
+        engine.showNotice('অনুমতি পাওয়া যায়নি', 'মোশন সেন্সর ব্যবহারের অনুমতি দিন', 'warning');
+      }
+      return;
+    }
+
+    setMotionActive(true);
+
+    // No sensor samples on this device (e.g. desktop) — roll back gracefully.
+    window.setTimeout(() => {
+      if (engineRef.current === engine && engine.getMotionStatus() === 'waiting') {
+        engine.disableMotionControl();
+        setMotionActive(false);
+        engine.showNotice('মোশন সেন্সর পাওয়া যায়নি', 'ফোনে খুলুন অথবা টাচ কন্ট্রোল ব্যবহার করুন', 'warning');
+      }
+    }, 1400);
+  }, []);
+
   const handlePause = useCallback(() => {
     engineRef.current?.togglePause();
   }, []);
@@ -152,11 +186,13 @@ export default function App() {
         sfxMuted={sfxMuted}
         musicMuted={musicMuted}
         showTouchControls={showTouchControls}
+        motionActive={motionActive}
         onStart={handleStart}
         onToggleMute={handleToggleMute}
         onToggleSfxMute={handleToggleSfxMute}
         onToggleMusicMute={handleToggleMusicMute}
         onToggleTouchControls={handleToggleTouchControls}
+        onToggleMotion={handleToggleMotion}
         onOpenShowroom={handleOpenShowroom}
         onCloseShowroom={handleCloseShowroom}
         onSelectBike={handleSelectBike}

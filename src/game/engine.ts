@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GameAudio } from './audio';
+import { MotionController, type MotionStatus } from './motion';
 import {
   buildCollectiblePickup,
   buildHeroMotorcycle,
@@ -239,6 +240,7 @@ export class HeroRastarEngine {
   private touchInput: InputState = { ...this.input };
   private commaSteer = false;
   private periodSteer = false;
+  private motion = new MotionController();
 
   // Player Physics State (Yaw-only upright motorcycle)
   private gameState: GameState = GameState.MENU;
@@ -959,6 +961,7 @@ export class HeroRastarEngine {
 
   public resumeGame(): void {
     if (this.gameState !== GameState.PAUSE) return;
+    this.motion.recalibrate();
     this.gameState = GameState.PLAYING;
     this.audio.updateEngine(Math.abs(this.forwardSpeed) * GAME_CONFIG.SPEED_KMH_FACTOR, this.wasBoosting, true, this.getActiveBikeSpec().tier);
     this.emitHud();
@@ -984,6 +987,7 @@ export class HeroRastarEngine {
     this.postHitRecoveryTimer = 0;
     this.wasBoosting = false;
     this.freeNitroTimer = 0;
+    this.motion.recalibrate();
 
     this.fuelAmount = this.getActiveBikeSpec().fuelCapacity;
     this.emptyStoppedTimer = 0;
@@ -1127,6 +1131,29 @@ export class HeroRastarEngine {
       horn: false,
     };
     this.syncCombinedInput();
+  }
+
+  /** Turns on gyroscope / device-tilt steering. Resolves false when unsupported or denied. */
+  public async enableMotionControl(): Promise<boolean> {
+    this.audio.unlock();
+    return this.motion.enable();
+  }
+
+  public disableMotionControl(): void {
+    this.motion.disable();
+  }
+
+  public getMotionStatus(): MotionStatus {
+    return this.motion.getStatus();
+  }
+
+  public isMotionControlEnabled(): boolean {
+    return this.motion.isEnabled;
+  }
+
+  /** Surfaces a short HUD toast outside the normal gameplay flow. */
+  public showNotice(title: string, subtitle?: string, tone: EventPopup['tone'] = 'warning'): void {
+    this.pushPopup(title, subtitle, tone);
   }
 
   public toggleMute(): boolean {
@@ -1623,6 +1650,12 @@ export class HeroRastarEngine {
     const brakingWithTouchBrake = this.input.brake && this.forwardSpeed > 2.5;
     const reversingWithTouchBrake = this.input.brake && this.forwardSpeed <= 2.5;
 
+    // Motion steering implies auto-throttle: while tilt mode is live the bike
+    // keeps rolling forward so the rider only has to lean the phone to steer.
+    // Braking / reverse / handbrake always take priority below.
+    const motionThrottle =
+      this.motion.isActive() && !this.input.brake && !this.input.reverse && !this.input.handbrake;
+
     let accel = 0;
     if (this.input.handbrake || brakingWithTouchBrake) {
       accel = this.forwardSpeed > 0.5 ? -32 : this.forwardSpeed < -0.5 ? 24 : 0;
@@ -1633,7 +1666,7 @@ export class HeroRastarEngine {
       } else {
         accel = -11;
       }
-    } else if (this.input.accelerate || hasFreeNitro) {
+    } else if (this.input.accelerate || hasFreeNitro || motionThrottle) {
       accel = (isBoosting ? 24 : hasFuel ? 14.5 : 6.0) * bikeSpec.accelMult;
     } else {
       accel = -Math.sign(this.forwardSpeed) * 4.5;
@@ -1651,7 +1684,11 @@ export class HeroRastarEngine {
     }
 
     // 2. Smoothed Speed-Scaled Steering (smooth ramp-in, crisp center on release, flips in reverse)
-    const rawSteer = (this.input.left ? 1 : 0) - (this.input.right ? 1 : 0); // +1 left (+Yaw CCW), -1 right
+    const keySteer = (this.input.left ? 1 : 0) - (this.input.right ? 1 : 0); // +1 left (+Yaw CCW), -1 right
+    // Motion / tilt steering only takes over when no key or touch steer is held,
+    // so the on-screen buttons always win when both are available.
+    const motionSteer = this.motion.getSteer(dt);
+    const rawSteer = keySteer !== 0 ? keySteer : motionSteer;
     const steerRate = rawSteer !== 0 ? 5.4 : 14.0;
     this.smoothedSteer = THREE.MathUtils.damp(this.smoothedSteer, rawSteer, steerRate, dt);
 
@@ -2913,6 +2950,7 @@ export class HeroRastarEngine {
     window.removeEventListener('keyup', this.handleKeyUp);
     window.removeEventListener('pointerdown', this.handleFirstGesture);
 
+    this.motion.disable();
     this.audio.dispose();
     this.textures.dispose();
 

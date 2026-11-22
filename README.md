@@ -45,6 +45,12 @@ A stylized, mobile-first 3D Dhaka-inspired motorcycle arcade game branded for **
 - Lower-center multi-touch cluster with **ব্রেক (BRAKE)** centered, surrounded by **^ চলুন (ACCEL)**, **বুস্ট (BOOST)**, **হর্ন (HORN)**, **< বাম (LEFT)**, **ডান > (RIGHT)**, and **v পেছনে (REV)**.
 - Pause button in the top-right dock; the game also auto-pauses when the tab loses focus.
 
+### Motion (Device Tilt)
+- Tap the **smartphone icon** in the top-right dock to toggle **motion steering**. Hold the phone comfortably, then **roll it left/right to steer** — no on-screen steering buttons required (the touch steering buttons still take priority while held).
+- On iOS 13+ the browser shows a motion-access permission prompt the first time; the ride must be served over **HTTPS** (or `localhost`) for motion events to fire.
+- A short neutral calibration is captured whenever motion mode is enabled, the ride starts, or the game resumes, so whatever angle you hold the phone at becomes "straight ahead". Tilt past ~32° in either direction for full steering lock.
+- Motion control is steering-only with **auto-throttle**: while tilt mode is live the bike keeps accelerating so you only lean the phone to steer. Hold **v পেছনে (REV/BRAKE)** or **হ্যান্ডব্রেক** to slow down; **বুস্ট (BOOST)** still needs its button (or Left Shift).
+
 ### Audio
 - **SFX** (engine, horns, impacts, voice lines) and **Music** (menu loop) can be muted independently from the pause menu or the top-right dock toggles.
 

@@ -17,6 +17,7 @@ import {
   RotateCcw,
   Shield,
   Skull,
+  Smartphone,
   Smile,
   Store,
   Trophy,
@@ -35,11 +36,13 @@ interface GameHUDProps {
   sfxMuted: boolean;
   musicMuted: boolean;
   showTouchControls: boolean;
+  motionActive: boolean;
   onStart: () => void;
   onToggleMute: () => void;
   onToggleSfxMute: () => void;
   onToggleMusicMute: () => void;
   onToggleTouchControls: () => void;
+  onToggleMotion: () => void;
   onOpenShowroom: () => void;
   onCloseShowroom: () => void;
   onSelectBike: (bikeId: BikeTierId) => { ok: boolean; message: string } | void;
@@ -291,11 +294,13 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   sfxMuted,
   musicMuted,
   showTouchControls,
+  motionActive,
   onStart,
   onToggleMute,
   onToggleSfxMute,
   onToggleMusicMute,
   onToggleTouchControls,
+  onToggleMotion,
   onOpenShowroom,
   onCloseShowroom,
   onSelectBike,
@@ -969,6 +974,22 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 <span className="tabular-nums font-bold text-white">{hud.upcomingLightMeters}m</span>
               </div>
             )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onToggleMotion();
+              }}
+              title={motionActive ? 'Motion Steering: On' : 'Motion Steering (tilt device)'}
+              aria-pressed={motionActive}
+              className={`bg-slate-950/82 border hover:border-amber-400 p-1 sm:p-1.5 rounded-md cursor-pointer ${
+                motionActive ? 'border-sky-300/80 shadow-[0_0_12px_rgba(56,189,248,0.55)]' : 'border-slate-600/80'
+              }`}
+            >
+              <Smartphone
+                className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${motionActive ? 'text-sky-300' : 'text-slate-400'}`}
+              />
+            </button>
             <button
               type="button"
               onClick={(e) => {
