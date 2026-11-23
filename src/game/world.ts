@@ -1,5 +1,10 @@
 import * as THREE from 'three';
 import {
+  buildExpandedDhakaCorridors,
+  type RestRoomNode,
+  type WorldChunk,
+} from './corridors';
+import {
   buildDhakaWelcomeArch,
   buildFuelStation,
   buildHighwayDirectionGantry,
@@ -13,7 +18,9 @@ import {
   type TrafficLightRig,
 } from './models';
 import type { ProceduralTextureSet } from './textures';
-import { GAME_CONFIG, type TrafficLightPhase } from './types';
+import { CORRIDOR_CONFIG, GAME_CONFIG, type TrafficLightPhase } from './types';
+
+export type { RestRoomNode };
 
 export interface WorldBlock {
   index: number;
@@ -22,6 +29,7 @@ export interface WorldBlock {
 }
 
 export interface IntersectionNode {
+  baseX: number;
   baseZ: number;
   nsLightRigs: TrafficLightRig[];
   ewLightRigs: TrafficLightRig[];
@@ -36,8 +44,8 @@ export interface SolidBuildingBox {
   id: string;
   minX: number;
   maxX: number;
-  baseMinZ: number;
-  baseMaxZ: number;
+  minZ: number;
+  maxZ: number;
 }
 
 export interface FuelStationNode {
@@ -45,7 +53,8 @@ export interface FuelStationNode {
   label: string;
   padMinX: number;
   padMaxX: number;
-  baseZ: number;
+  padMinZ: number;
+  padMaxZ: number;
   nozzleX: number;
   nozzleY: number;
   nozzleZ: number;
@@ -56,7 +65,8 @@ export interface ShowroomNode {
   labelBn: string;
   padMinX: number;
   padMaxX: number;
-  baseZ: number;
+  padMinZ: number;
+  padMaxZ: number;
 }
 
 export interface CityLane {
@@ -74,10 +84,12 @@ export interface DhakaWorld {
   groundPlane: THREE.Mesh;
   metroTrain: THREE.Group;
   blocks: WorldBlock[];
+  chunks: WorldChunk[];
   intersections: IntersectionNode[];
   solidBuildings: SolidBuildingBox[];
   fuelStations: FuelStationNode[];
   showrooms: ShowroomNode[];
+  restRooms: RestRoomNode[];
   cityLanes: CityLane[];
   updateAroundPlayer: (playerZ: number, elapsedSec: number, playerX?: number, forceSalute?: boolean) => void;
   isOnArterySidewalk: (x: number, z: number) => boolean;
@@ -281,9 +293,9 @@ function createAccidentSloganHoarding(tex: THREE.CanvasTexture, yaw = 0.25): THR
 export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
   const root = new THREE.Group();
 
-  // Lush green Dhaka urban verge ground spanning well past 78m side city & 720m loop
+  // Lush green Dhaka urban verge ground centered dynamically under the rider
   const groundMat = new THREE.MeshStandardMaterial({ color: 0x4d7c0f, roughness: 0.94, metalness: 0.0 });
-  const groundPlane = new THREE.Mesh(new THREE.PlaneGeometry(540, 1320), groundMat);
+  const groundPlane = new THREE.Mesh(new THREE.PlaneGeometry(820, 820), groundMat);
   groundPlane.rotation.x = -Math.PI / 2;
   groundPlane.position.y = -0.05;
   groundPlane.receiveShadow = true;
@@ -302,6 +314,7 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
   root.add(metroTrain);
 
   const blocks: WorldBlock[] = [];
+  const chunks: WorldChunk[] = [];
   const intersections: IntersectionNode[] = [];
   const solidBuildings: SolidBuildingBox[] = [];
 
@@ -311,7 +324,8 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
       label: 'আর্টারিয়াল তেল পাম্প',
       padMinX: -12.6,
       padMaxX: -6.0,
-      baseZ: -360,
+      padMinZ: -360 - GAME_CONFIG.FUEL_PAD_HALF_LENGTH,
+      padMaxZ: -360 + GAME_CONFIG.FUEL_PAD_HALF_LENGTH,
       nozzleX: -13.2,
       nozzleY: 1.25,
       nozzleZ: -360,
@@ -321,7 +335,8 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
       label: 'পশ্চিম ডাউনটাউন পাম্প',
       padMinX: -46.2,
       padMaxX: -39.0,
-      baseZ: -40,
+      padMinZ: -40 - GAME_CONFIG.FUEL_PAD_HALF_LENGTH,
+      padMaxZ: -40 + GAME_CONFIG.FUEL_PAD_HALF_LENGTH,
       nozzleX: -47.2,
       nozzleY: 1.25,
       nozzleZ: -40,
@@ -331,7 +346,8 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
       label: 'পূর্ব ডাউনটাউন পাম্প',
       padMinX: 39.0,
       padMaxX: 46.2,
-      baseZ: -360,
+      padMinZ: -360 - GAME_CONFIG.FUEL_PAD_HALF_LENGTH,
+      padMaxZ: -360 + GAME_CONFIG.FUEL_PAD_HALF_LENGTH,
       nozzleX: 47.2,
       nozzleY: 1.25,
       nozzleZ: -360,
@@ -344,14 +360,16 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
       labelBn: 'নিলয় হিরো মেইন শোরুম',
       padMinX: -12.8,
       padMaxX: -7.2,
-      baseZ: -48,
+      padMinZ: -48 - GAME_CONFIG.SHOWROOM_PAD_HALF_LENGTH,
+      padMaxZ: -48 + GAME_CONFIG.SHOWROOM_PAD_HALF_LENGTH,
     },
     {
       id: 'downtown_east_showroom',
       labelBn: 'নিলয় হিরো গুলশান শোরুম',
       padMinX: 38.8,
       padMaxX: 45.8,
-      baseZ: -120,
+      padMinZ: -120 - GAME_CONFIG.SHOWROOM_PAD_HALF_LENGTH,
+      padMaxZ: -120 + GAME_CONFIG.SHOWROOM_PAD_HALF_LENGTH,
     },
   ];
   const showroomDisplayBikes: THREE.Object3D[] = [];
@@ -452,7 +470,7 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
     for (const side of [-1, 1]) {
       const hasShowroomBay = i === 0 && side === -1;
       const hasMidGap = intersectionZ !== undefined || (i === 4 && side === -1) || hasShowroomBay;
-      const midCenter = hasShowroomBay ? showrooms[0].baseZ - baseZ : 0; // -8 for block 0 showroom
+      const midCenter = hasShowroomBay ? (showrooms[0].padMinZ + showrooms[0].padMaxZ) * 0.5 - baseZ : 0; // -8 for block 0 showroom
       const midGapHalf = intersectionZ !== undefined ? 9.5 : 11.6;
       const swCenterX = side * (GAME_CONFIG.ARTERY_HALF_WIDTH + 1.6);
 
@@ -556,6 +574,7 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
       g.add(ewRigEast.group);
 
       intersections.push({
+        baseX: 0,
         baseZ: intersectionZ,
         nsLightRigs: [nsRigSouth, nsRigNorth],
         ewLightRigs: [ewRigWest, ewRigEast],
@@ -611,8 +630,8 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
           id: `Bld_metro_esc_${i}_${side}`,
           minX: tx - 1.25,
           maxX: tx + 1.25,
-          baseMinZ: baseZ + 1.0,
-          baseMaxZ: baseZ + 12.2,
+          minZ: baseZ + 1.0,
+          maxZ: baseZ + 12.2,
         });
       }
     }
@@ -649,8 +668,8 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
 
     // Fuel Stations inside this block (Arterial + West Downtown + East Downtown)
     for (const fs of fuelStations) {
-      if (fs.baseZ <= blockStartZ && fs.baseZ > blockEndZ) {
-        const localZ = fs.baseZ - baseZ;
+      if (fs.nozzleZ <= blockStartZ && fs.nozzleZ > blockEndZ) {
+        const localZ = fs.nozzleZ - baseZ;
         const isEast = fs.id === 'downtown_east_pump';
         const station = buildFuelStation(textures, !isEast);
         const stX = fs.id === 'arterial_pump' ? -10.2 : isEast ? 44.2 : -44.2;
@@ -661,8 +680,9 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
 
     // Niloy Hero Showrooms inside this block (Arterial Flagship + Downtown East)
     for (const sr of showrooms) {
-      if (sr.baseZ <= blockStartZ && sr.baseZ > blockEndZ) {
-        const localZ = sr.baseZ - baseZ;
+      const srZ = (sr.padMinZ + sr.padMaxZ) * 0.5;
+      if (srZ <= blockStartZ && srZ > blockEndZ) {
+        const localZ = srZ - baseZ;
         const isEast = sr.id === 'downtown_east_showroom';
         const built = buildNiloyHeroShowroom(textures, !isEast);
         const srX = isEast ? 44.2 : -10.2;
@@ -673,7 +693,7 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
           showroomStaff.push({
             rig: st.rig,
             worldX: srX + st.localX,
-            baseZ: sr.baseZ + st.localZ,
+            baseZ: srZ + st.localZ,
             baseYaw: st.baseYaw,
             idx: showroomStaff.length,
           });
@@ -683,8 +703,8 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
           id: `Bld_showroom_${sr.id}`,
           minX: isEast ? srX + 3.4 : srX - 13.3,
           maxX: isEast ? srX + 13.3 : srX - 3.4,
-          baseMinZ: sr.baseZ - 9.5,
-          baseMaxZ: sr.baseZ + 9.5,
+          minZ: srZ - 9.5,
+          maxZ: srZ + 9.5,
         });
       }
     }
@@ -699,8 +719,8 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
 
       // Column 1: Inner Road-facing blocks (x = ±21, width 12 -> ±15..±27)
       for (const side of [-1, 1]) {
-        const nearArterialPump = side === -1 && Math.abs(worldSlotZ - fuelStations[0].baseZ) < 18;
-        const nearArterialShowroom = side === -1 && Math.abs(worldSlotZ - showrooms[0].baseZ) < 18;
+        const nearArterialPump = side === -1 && Math.abs(worldSlotZ - fuelStations[0].nozzleZ) < 18;
+        const nearArterialShowroom = side === -1 && Math.abs(worldSlotZ - ((showrooms[0].padMinZ + showrooms[0].padMaxZ) * 0.5)) < 18;
         if (nearArterialPump || nearArterialShowroom) continue;
 
         const w = 12;
@@ -720,16 +740,16 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
           id: `Bld_in_${i}_${side}_${slotZ}`,
           minX: cx - w / 2,
           maxX: cx + w / 2,
-          baseMinZ: worldSlotZ - d / 2,
-          baseMaxZ: worldSlotZ + d / 2,
+          minZ: worldSlotZ - d / 2,
+          maxZ: worldSlotZ + d / 2,
         });
       }
 
       // Column 2: Mid City blocks between avenues ±34 and ±62 (x = ±48, width 12 -> ±42..±54)
       for (const side of [-1, 1]) {
-        const nearWestPump = side === -1 && Math.abs(worldSlotZ - fuelStations[1].baseZ) < 18;
-        const nearEastPump = side === 1 && Math.abs(worldSlotZ - fuelStations[2].baseZ) < 18;
-        const nearEastShowroom = side === 1 && Math.abs(worldSlotZ - showrooms[1].baseZ) < 18;
+        const nearWestPump = side === -1 && Math.abs(worldSlotZ - fuelStations[1].nozzleZ) < 18;
+        const nearEastPump = side === 1 && Math.abs(worldSlotZ - fuelStations[2].nozzleZ) < 18;
+        const nearEastShowroom = side === 1 && Math.abs(worldSlotZ - ((showrooms[1].padMinZ + showrooms[1].padMaxZ) * 0.5)) < 18;
         if (nearWestPump || nearEastPump || nearEastShowroom) continue;
 
         const w = 12;
@@ -749,8 +769,8 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
           id: `Bld_mid_${i}_${side}_${slotZ}`,
           minX: cx - w / 2,
           maxX: cx + w / 2,
-          baseMinZ: worldSlotZ - d / 2,
-          baseMaxZ: worldSlotZ + d / 2,
+          minZ: worldSlotZ - d / 2,
+          maxZ: worldSlotZ + d / 2,
         });
       }
 
@@ -773,8 +793,8 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
           id: `Bld_rim_${i}_${side}_${slotZ}`,
           minX: cx - w / 2,
           maxX: cx + w / 2,
-          baseMinZ: worldSlotZ - d / 2,
-          baseMaxZ: worldSlotZ + d / 2,
+          minZ: worldSlotZ - d / 2,
+          maxZ: worldSlotZ + d / 2,
         });
       }
     }
@@ -799,8 +819,8 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
     for (let pz = -28; pz <= 28; pz += 28) {
       const worldZ = baseZ + pz;
       const nearCross = intersectionZ !== undefined && Math.abs(worldZ - intersectionZ) < 14;
-      const nearPump = Math.abs(worldZ - fuelStations[0].baseZ) < 16;
-      const nearShowroom = Math.abs(worldZ - showrooms[0].baseZ) < 18;
+      const nearPump = Math.abs(worldZ - fuelStations[0].nozzleZ) < 16;
+      const nearShowroom = Math.abs(worldZ - ((showrooms[0].padMinZ + showrooms[0].padMaxZ) * 0.5)) < 18;
 
       if (!nearCross && !nearShowroom) {
         for (const side of [-1, 1] as const) {
@@ -864,7 +884,7 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
     }
 
     // Funny Bangla signs + Official Dhaka Traffic Control Signs placed clearly along roadsides!
-    if (Math.abs(baseZ - fuelStations[0].baseZ) > 30 && stationIdx === undefined) {
+    if (Math.abs(baseZ - fuelStations[0].nozzleZ) > 30 && stationIdx === undefined) {
       const signTexLeft = textures.roadSigns[i % textures.roadSigns.length];
       const signLeft = createFunnyRoadSign(signTexLeft, 0.32);
       signLeft.position.set(-GAME_CONFIG.ARTERY_HALF_WIDTH - 1.35, 0.12, 18);
@@ -919,17 +939,29 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
 
     root.add(g);
     blocks.push({ index: i, baseZ, group: g });
+    chunks.push({ id: `metro_start_${i}`, centerX: 0, centerZ: baseZ, halfExtent: 90, group: g });
   }
 
-  const updateAroundPlayer = (playerZ: number, elapsedSec: number, playerX = -3.25, forceSalute = false) => {
-    groundPlane.position.z = playerZ - 80;
+  // Merge Extended Dhaka Corridors (Agargaon Metro + Tejgaon Billboard + Link + Mohakhali/Banani/Kuril Flyovers + 300ft Expressway + Neela Market + Uttara U-Turn)
+  const expanded = buildExpandedDhakaCorridors(textures);
+  root.add(expanded.root);
+  chunks.push(...expanded.chunks);
+  fuelStations.push(...expanded.fuelStations);
+  showrooms.push(...expanded.showrooms);
+  const restRooms: RestRoomNode[] = [...expanded.restRooms];
+  solidBuildings.push(...expanded.solidBuildings);
+  intersections.push(...expanded.intersections);
+  showroomDisplayBikes.push(...expanded.displayBikes);
+  showroomStaff.push(...expanded.staff);
 
-    const loopLen = GAME_CONFIG.LOOP_LENGTH; // 720m
-    for (const block of blocks) {
-      let dz = block.baseZ - playerZ;
-      while (dz > 240) dz -= loopLen;
-      while (dz <= -(loopLen - 240)) dz += loopLen;
-      block.group.position.z = playerZ + dz;
+  const updateAroundPlayer = (playerZ: number, elapsedSec: number, playerX = -3.25, forceSalute = false) => {
+    groundPlane.position.set(playerX, -0.05, playerZ);
+
+    // Distance-based visibility culling across the entire 3.7km x 2.2km Dhaka corridor network
+    for (const chunk of chunks) {
+      chunk.group.visible =
+        Math.abs(chunk.centerX - playerX) < 520 + chunk.halfExtent &&
+        Math.abs(chunk.centerZ - playerZ) < 520 + chunk.halfExtent;
     }
 
     // Rotate showroom display motorcycles on their glass turntables
@@ -940,7 +972,7 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
     // Animate Niloy Hero showroom attendants saluting & welcoming approaching riders
     for (const st of showroomStaff) {
       const dx = playerX - st.worldX;
-      const dz = -wrapLoopDelta(st.baseZ, playerZ);
+      const dz = playerZ - st.baseZ;
       const dist = Math.hypot(dx, dz);
       const shouldSalute = dist < 30 || (forceSalute && dist < 24);
       const targetIntensity = shouldSalute ? 1 : 0;
@@ -960,7 +992,6 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
         st.rig.group.rotation.y += diff * 0.1;
       }
 
-      // Crisp right-hand VIP salute to cap visor + polite nod + welcoming left gesture
       st.rig.rightArmPivot.rotation.x = -1.42 * s;
       st.rig.rightArmPivot.rotation.z = -0.52 * s;
       st.rig.rightForearmPivot.rotation.x = -1.32 * s;
@@ -970,20 +1001,12 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
       st.rig.leftArmPivot.rotation.x = -0.35 * s;
     }
 
-    // Animated Metro Rail train glides overhead along viaduct & stations
-    const trainWorldZ = -((elapsedSec * 24) % loopLen);
-    let tdz = trainWorldZ - playerZ;
-    while (tdz > 240) tdz -= loopLen;
-    while (tdz <= -(loopLen - 240)) tdz += loopLen;
-    metroTrain.position.set(-1.35, 7.55, playerZ + tdz);
+    // Animated Metro Rail train glides overhead along Farmgate -> Agargaon viaduct
+    const trainWorldZ = -((elapsedSec * 24) % Math.abs(CORRIDOR_CONFIG.METRO_EXT_MIN_Z));
+    metroTrain.position.set(-1.35, 7.55, trainWorldZ);
+    metroTrain.visible = Math.abs(playerX) < 180 && playerZ > CORRIDOR_CONFIG.METRO_EXT_MIN_Z - 240;
 
-    // Realistic 16s 4-Way Signal Cycle with All-Red Clearance Gaps:
-    // 0.0..6.2s: NS GREEN, EW RED
-    // 6.2..8.0s: NS YELLOW, EW RED
-    // 8.0..8.8s: ALL RED clearance
-    // 8.8..14.0s: NS RED, EW GREEN
-    // 14.0..15.5s: NS RED, EW YELLOW
-    // 15.5..16.0s: ALL RED clearance
+    // Realistic 16s 4-Way Signal Cycle with All-Red Clearance Gaps
     for (const inter of intersections) {
       const t = (elapsedSec + inter.cycleOffset) % 16.0;
       let nsPhase: TrafficLightPhase = 'RED';
@@ -1017,23 +1040,49 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
   };
 
   const isOnArterySidewalk = (x: number, z: number): boolean => {
-    const absX = Math.abs(x);
-    if (absX < GAME_CONFIG.ARTERY_HALF_WIDTH + 0.15 || absX > GAME_CONFIG.ARTERY_HALF_WIDTH + 2.9) {
-      return false;
+    // 1. Metro Rail Artery Sidewalks (x ~ ±9.75 .. ±12.5, z = 0 .. -1198; U-turn plaza open)
+    if (z <= 0 && z >= -1198 && Math.abs(x) < 20) {
+      const absX = Math.abs(x);
+      if (absX < GAME_CONFIG.ARTERY_HALF_WIDTH + 0.15 || absX > GAME_CONFIG.ARTERY_HALF_WIDTH + 2.9) {
+        return false;
+      }
+      for (const iz of GAME_CONFIG.INTERSECTION_Z_POSITIONS) {
+        if (Math.abs(z - iz) < 9.5) return false;
+      }
+      for (const gz of GOLI_ALLEY_Z_POSITIONS) {
+        if (Math.abs(z - gz) < 5.0) return false;
+      }
+      if (x > 0 && Math.abs(z - CORRIDOR_CONFIG.TEJGAON_TURNOFF_Z) < 16) {
+        return false;
+      }
+      for (const fs of fuelStations) {
+        if (fs.id === 'arterial_pump' && z >= fs.padMinZ && z <= fs.padMaxZ && x < 0) return false;
+      }
+      for (const sr of showrooms) {
+        if (sr.id === 'arterial_showroom' && z >= sr.padMinZ && z <= sr.padMaxZ && x < 0) return false;
+      }
+      return true;
     }
-    for (const iz of GAME_CONFIG.INTERSECTION_Z_POSITIONS) {
-      if (Math.abs(wrapLoopDelta(z, iz)) < 9.5) return false;
+
+    // 2. Tejgaon -> Uttara Spine Sidewalks (x = 140 ± [10.55 .. 13.4]; South & Uttara U-turn plazas open)
+    if (z <= -1070 && z >= -3650 && Math.abs(x - CORRIDOR_CONFIG.SPINE_X) < 16) {
+      const relX = x - CORRIDOR_CONFIG.SPINE_X;
+      const absRelX = Math.abs(relX);
+      if (absRelX < CORRIDOR_CONFIG.SPINE_HALF_WIDTH + 0.15 || absRelX > CORRIDOR_CONFIG.SPINE_HALF_WIDTH + 3.0) {
+        return false;
+      }
+      if (relX < 0 && Math.abs(z - CORRIDOR_CONFIG.TEJGAON_TURNOFF_Z) < 16) return false;
+      if (relX > 0 && z <= -2620 && z >= -3020) return false;
+      for (const sr of showrooms) {
+        if (z >= sr.padMinZ && z <= sr.padMaxZ && x >= sr.padMinX - 2 && x <= sr.padMaxX + 2) return false;
+      }
+      for (const fs of fuelStations) {
+        if (z >= fs.padMinZ && z <= fs.padMaxZ && x >= fs.padMinX - 2 && x <= fs.padMaxX + 2) return false;
+      }
+      return true;
     }
-    for (const gz of GOLI_ALLEY_Z_POSITIONS) {
-      if (Math.abs(wrapLoopDelta(z, gz)) < 5.0) return false;
-    }
-    if (x < 0 && Math.abs(wrapLoopDelta(z, fuelStations[0].baseZ)) <= GAME_CONFIG.FUEL_PAD_HALF_LENGTH) {
-      return false;
-    }
-    if (x < 0 && Math.abs(wrapLoopDelta(z, showrooms[0].baseZ)) <= GAME_CONFIG.SHOWROOM_PAD_HALF_LENGTH) {
-      return false;
-    }
-    return true;
+
+    return false;
   };
 
   return {
@@ -1041,10 +1090,12 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
     groundPlane,
     metroTrain,
     blocks,
+    chunks,
     intersections,
     solidBuildings,
     fuelStations,
     showrooms,
+    restRooms,
     cityLanes,
     updateAroundPlayer,
     isOnArterySidewalk,

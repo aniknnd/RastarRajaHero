@@ -12,6 +12,7 @@ import type { InputState } from '../game/types';
 interface TouchControlsProps {
   onControlChange: (control: keyof InputState, pressed: boolean) => void;
   visible: boolean;
+  motionOnlyBrake?: boolean;
 }
 
 interface HoldButtonProps {
@@ -125,8 +126,43 @@ const HoldButton: React.FC<HoldButtonProps> = ({
   );
 };
 
-export const TouchControls: React.FC<TouchControlsProps> = ({ onControlChange, visible }) => {
+export const TouchControls: React.FC<TouchControlsProps> = ({
+  onControlChange,
+  visible,
+  motionOnlyBrake = false,
+}) => {
   if (!visible) return null;
+
+  if (motionOnlyBrake) {
+    return (
+      <div className="pointer-events-auto fixed bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center justify-center pb-[env(safe-area-inset-bottom,0px)]">
+        <HoldButton
+          control="brake"
+          ariaLabel="Brake"
+          primaryLabel="ব্রেক"
+          subLabel="BRAKE"
+          primaryBengali
+          onControlChange={onControlChange}
+          className="w-40 sm:w-48 h-16 sm:h-[4.4rem] bg-gradient-to-b from-red-600/95 to-red-950/95 border-red-300/85 text-white"
+          activeClassName="w-40 sm:w-48 h-16 sm:h-[4.4rem] bg-red-400 border-white text-slate-950 ring-2 ring-white/90 shadow-[0_0_26px_rgba(248,113,113,0.85)]"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="w-5 h-5 sm:w-6 sm:h-6"
+            aria-hidden="true"
+          >
+            <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2" />
+            <rect x="9" y="9" width="6" height="6" fill="currentColor" stroke="none" rx="1" />
+          </svg>
+        </HoldButton>
+      </div>
+    );
+  }
 
   return (
     <div

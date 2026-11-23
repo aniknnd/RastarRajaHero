@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Clock,
+  Coffee,
   Compass,
   Flame,
   Fuel,
@@ -11,7 +12,9 @@ import {
   Gauge,
   Lock,
   MapPin,
+  Moon,
   Music,
+  Navigation,
   Pause,
   Play,
   RotateCcw,
@@ -20,6 +23,9 @@ import {
   Smartphone,
   Smile,
   Store,
+  Sun,
+  Sunrise,
+  Sunset,
   Trophy,
   Users,
   Volume2,
@@ -28,7 +34,16 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { BIKE_ORDER, BIKE_SPECS, GameState, type BikeTierId, type HudSnapshot, type MotionStatus } from '../game/types';
+import {
+  BIKE_ORDER,
+  BIKE_SPECS,
+  ENVIRONMENT_PRESETS,
+  GameState,
+  type BikeTierId,
+  type EnvironmentPresetId,
+  type HudSnapshot,
+  type MotionStatus,
+} from '../game/types';
 
 interface GameHUDProps {
   hud: HudSnapshot;
@@ -44,6 +59,8 @@ interface GameHUDProps {
   onToggleMusicMute: () => void;
   onToggleTouchControls: () => void;
   onToggleMotion: () => void;
+  onCycleEnvironment: () => void;
+  onSelectEnvironment: (preset: EnvironmentPresetId) => void;
   onOpenShowroom: () => void;
   onCloseShowroom: () => void;
   onSelectBike: (bikeId: BikeTierId) => { ok: boolean; message: string } | void;
@@ -51,11 +68,18 @@ interface GameHUDProps {
   onResumeGame: () => void;
 }
 
+const EnvPresetIcon: React.FC<{ id: EnvironmentPresetId; className?: string }> = ({ id, className = 'w-3.5 h-3.5' }) => {
+  if (id === 'morning') return <Sunrise className={`${className} text-amber-300`} />;
+  if (id === 'afternoon') return <Sun className={`${className} text-yellow-300`} />;
+  if (id === 'sunset') return <Sunset className={`${className} text-orange-400`} />;
+  return <Moon className={`${className} text-sky-300`} />;
+};
+
 const TitleLockupSVG: React.FC = () => (
   <svg
     viewBox="0 0 560 132"
     className="w-full max-w-[440px] h-auto drop-shadow-[0_6px_18px_rgba(0,0,0,0.65)]"
-    aria-label="হিরো রাস্তার রাজা - Hero Rastar Raja"
+    aria-label="DTA - Dhata Te Achi - ডিটিএ ঢাকাতে আছি"
   >
     <defs>
       <linearGradient id="heroRed" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -77,22 +101,35 @@ const TitleLockupSVG: React.FC = () => (
       y="62"
       textAnchor="middle"
       fill="#ffffff"
-      fontSize="34"
+      fontSize="40"
       fontWeight="800"
-      fontFamily="Noto Sans Bengali, sans-serif"
+      fontFamily="Chakra Petch, Noto Sans Bengali, sans-serif"
+      letterSpacing="1"
     >
-      হিরো
+      DTA
     </text>
     <text
       x="344"
-      y="62"
+      y="58"
       textAnchor="middle"
       fill="url(#goldTrim)"
       fontSize="34"
       fontWeight="800"
       fontFamily="Noto Sans Bengali, sans-serif"
     >
-      রাস্তার রাজা
+      ঢাকাতে আছি
+    </text>
+    <text
+      x="344"
+      y="80"
+      textAnchor="middle"
+      fill="#fef3c7"
+      fontSize="15"
+      fontWeight="700"
+      fontFamily="Chakra Petch, sans-serif"
+      letterSpacing="1.5"
+    >
+      DHATA TE ACHI
     </text>
     <rect x="64" y="94" width="432" height="30" rx="6" fill="#065f46" stroke="#fde047" strokeWidth="2" />
     <text
@@ -303,6 +340,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   onToggleMusicMute,
   onToggleTouchControls,
   onToggleMotion,
+  onCycleEnvironment,
+  onSelectEnvironment,
   onOpenShowroom,
   onCloseShowroom,
   onSelectBike,
@@ -579,6 +618,36 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             </button>
           </div>
 
+          {/* Environment time-of-day selector */}
+          <div className="bg-slate-900/90 border border-slate-700 rounded-xl p-2 text-left">
+            <div className="text-[11px] font-bengali font-bold text-amber-300 mb-1.5 flex items-center justify-between">
+              <span>পরিবেশ / সময় (Environment)</span>
+              <span className="text-[10px] text-slate-400 font-sans">
+                {ENVIRONMENT_PRESETS.find((e) => e.id === hud.environmentPreset)?.labelEn}
+              </span>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {ENVIRONMENT_PRESETS.map((env) => {
+                const active = hud.environmentPreset === env.id;
+                return (
+                  <button
+                    key={env.id}
+                    type="button"
+                    onClick={() => onSelectEnvironment(env.id)}
+                    className={`flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 rounded-lg border text-[11px] font-bengali font-bold cursor-pointer transition-colors ${
+                      active
+                        ? 'bg-amber-400/20 border-amber-300 text-amber-200'
+                        : 'bg-slate-950/80 border-slate-700 text-slate-300 hover:border-slate-500'
+                    }`}
+                  >
+                    <EnvPresetIcon id={env.id} className="w-3.5 h-3.5" />
+                    <span>{env.labelBn}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Run stats */}
           <div className="grid grid-cols-2 gap-2 text-left">
             <div className="bg-slate-900 border border-slate-700 rounded-xl p-2 flex items-center justify-between">
@@ -707,6 +776,36 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               </button>
             </div>
 
+            {/* 4 Time-of-Day GTA Environments */}
+            <div className="bg-slate-900/95 border border-slate-700 rounded-xl px-2.5 py-2">
+              <div className="flex items-center justify-between text-[11px] mb-1.5">
+                <span className="font-bengali font-bold text-amber-300">আবহাওয়া ও সময় (Sky & Lighting)</span>
+                <span className="text-[10px] font-semibold text-sky-300">
+                  {ENVIRONMENT_PRESETS.find((e) => e.id === hud.environmentPreset)?.labelEn}
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {ENVIRONMENT_PRESETS.map((env) => {
+                  const active = hud.environmentPreset === env.id;
+                  return (
+                    <button
+                      key={env.id}
+                      type="button"
+                      onClick={() => onSelectEnvironment(env.id)}
+                      className={`flex items-center justify-center gap-1 py-1.5 px-1.5 rounded-lg border text-xs font-bengali font-bold cursor-pointer transition-colors ${
+                        active
+                          ? 'bg-amber-400/20 border-amber-300 text-amber-200 shadow-sm'
+                          : 'bg-slate-950/75 border-slate-700 text-slate-300 hover:border-slate-500'
+                      }`}
+                    >
+                      <EnvPresetIcon id={env.id} className="w-3.5 h-3.5 shrink-0" />
+                      <span>{env.labelBn}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <button
               type="button"
               onClick={onStart}
@@ -808,6 +907,13 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               <Compass className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-sky-400 shrink-0" />
               <span className="font-bengali font-semibold truncate">{hud.zoneLabelBn}</span>
             </div>
+
+            {hud.routeHintBn && (
+              <div className="bg-slate-950/82 border border-amber-400/50 rounded px-1.5 py-0.5 flex items-center gap-1 text-[9px] sm:text-[10px] text-amber-200 max-w-[170px] sm:max-w-[260px]">
+                <Navigation className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-400 shrink-0" />
+                <span className="font-bengali font-semibold truncate">{hud.routeHintBn}</span>
+              </div>
+            )}
 
             {hud.combo > 1 && (
               <div
@@ -980,6 +1086,20 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               type="button"
               onClick={(e) => {
                 e.currentTarget.blur();
+                onCycleEnvironment();
+              }}
+              title={`Sky: ${ENVIRONMENT_PRESETS.find((e) => e.id === hud.environmentPreset)?.labelEn ?? 'Sunset'} (Tap to change)`}
+              className="bg-slate-950/82 border border-slate-600/80 hover:border-amber-400 px-1.5 py-1 sm:p-1.5 rounded-md text-slate-200 cursor-pointer flex items-center gap-1"
+            >
+              <EnvPresetIcon id={hud.environmentPreset} className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline font-bengali text-[10px] font-bold text-amber-200">
+                {ENVIRONMENT_PRESETS.find((e) => e.id === hud.environmentPreset)?.labelBn}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.currentTarget.blur();
                 onToggleMotion();
               }}
               title={
@@ -1110,6 +1230,16 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             <p className="font-bengali text-[10px] sm:text-xs font-bold text-amber-300 flex items-center justify-center gap-1">
               <Store className="w-3 h-3 text-emerald-300 shrink-0" />
               শোরুম টিম স্যালুট দিচ্ছে · ঢুকতে গতি কমান (≤২৫ km/h)
+            </p>
+          </div>
+        )}
+
+        {/* Compact Neela Market Bikers Rest Room Pill */}
+        {hud.isInRestRoomZone && hud.gameState === GameState.PLAYING && (
+          <div className="bg-teal-950/92 border border-teal-300 text-white rounded-lg px-2.5 py-1 shadow">
+            <p className="font-bengali text-[10px] sm:text-xs font-bold text-teal-200 flex items-center justify-center gap-1">
+              <Coffee className="w-3 h-3 text-amber-300 shrink-0" />
+              বাইকারস রেস্ট রুম (নীলা মার্কেট) · চা-নাস্তা ও ফুল ট্যাংক নিতে গতি কমান (≤২৬ km/h)
             </p>
           </div>
         )}

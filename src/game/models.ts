@@ -2416,4 +2416,570 @@ export function buildCollectiblePickup(kind: PickupKind): THREE.Group {
   return group;
 }
 
+export function buildFootOverbridge(
+  spanWidth = 23.5,
+  clearanceY = 5.4,
+  bannerTex?: THREE.Texture
+): THREE.Group {
+  const bridge = new THREE.Group();
+  const steelMat = new THREE.MeshStandardMaterial({ color: 0x0f766e, metalness: 0.65, roughness: 0.38 });
+  const concreteMat = new THREE.MeshStandardMaterial({ color: 0xd6d3d1, roughness: 0.85 });
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.4, metalness: 0.25 });
+  const railMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.4, metalness: 0.3 });
+
+  const halfSpan = spanWidth / 2;
+
+  // Main elevated pedestrian deck spanning across the carriageway
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(spanWidth, 0.42, 2.6), concreteMat);
+  deck.position.set(0, clearanceY, 0);
+  deck.castShadow = true;
+  bridge.add(deck);
+
+  // Protective steel side trusses & safety mesh rails along the walkway
+  for (const rz of [-1.22, 1.22]) {
+    const topChord = new THREE.Mesh(new THREE.BoxGeometry(spanWidth, 0.18, 0.16), steelMat);
+    topChord.position.set(0, clearanceY + 1.45, rz);
+    bridge.add(topChord);
+
+    const midRail = new THREE.Mesh(new THREE.BoxGeometry(spanWidth, 0.1, 0.1), railMat);
+    midRail.position.set(0, clearanceY + 0.78, rz);
+    bridge.add(midRail);
+
+    const trussPosts = 9;
+    for (let p = 0; p < trussPosts; p++) {
+      const px = -halfSpan + 0.8 + (p / (trussPosts - 1)) * (spanWidth - 1.6);
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.5, 0.12), steelMat);
+      post.position.set(px, clearanceY + 0.75, rz);
+      bridge.add(post);
+    }
+  }
+
+  // Sun/rain canopy roof over the bridge deck
+  const canopy = new THREE.Mesh(new THREE.BoxGeometry(spanWidth + 0.6, 0.16, 3.0), roofMat);
+  canopy.position.set(0, clearanceY + 2.35, 0);
+  bridge.add(canopy);
+
+  for (const sx of [-halfSpan, halfSpan]) {
+    // Sidewalk support piers (outside roadway)
+    const pier = new THREE.Mesh(new THREE.BoxGeometry(0.9, clearanceY + 0.4, 1.8), concreteMat);
+    pier.position.set(sx, (clearanceY + 0.4) / 2, 0);
+    pier.castShadow = true;
+    bridge.add(pier);
+
+    // Sidewalk staircase descending along Z
+    const stairLen = Math.hypot(clearanceY, 6.2);
+    const stairAngle = Math.atan2(clearanceY, 6.2);
+    const stairStringer = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.32, stairLen), steelMat);
+    stairStringer.position.set(sx + Math.sign(sx) * 0.95, clearanceY * 0.5, 3.6);
+    stairStringer.rotation.x = stairAngle;
+    bridge.add(stairStringer);
+
+    const stairRail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, stairLen), railMat);
+    stairRail.position.set(sx + Math.sign(sx) * 0.28, clearanceY * 0.5 + 0.85, 3.6);
+    stairRail.rotation.x = stairAngle;
+    bridge.add(stairRail);
+  }
+
+  if (bannerTex) {
+    const banner = new THREE.Mesh(
+      new THREE.BoxGeometry(spanWidth * 0.56, 1.15, 0.16),
+      new THREE.MeshBasicMaterial({ map: bannerTex })
+    );
+    banner.position.set(0, clearanceY + 0.85, 1.38);
+    bridge.add(banner);
+    const bannerBack = banner.clone();
+    bannerBack.position.z = -1.38;
+    bridge.add(bannerBack);
+  }
+
+  return bridge;
+}
+
+export function buildTejgaonTurnBillboard(tex: THREE.CanvasTexture): THREE.Group {
+  const g = new THREE.Group();
+  const steelMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.78, roughness: 0.3 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.35, metalness: 0.4 });
+  const boardMat = new THREE.MeshBasicMaterial({ map: tex });
+
+  for (const px of [-3.6, 3.6]) {
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.3, 6.2, 10), steelMat);
+    col.position.set(px, 3.1, 0);
+    col.castShadow = true;
+    g.add(col);
+  }
+
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(11.6, 4.4, 0.38), trimMat);
+  frame.position.set(0, 6.6, 0);
+  frame.castShadow = true;
+  g.add(frame);
+
+  const board = new THREE.Mesh(new THREE.BoxGeometry(11.2, 4.05, 0.44), boardMat);
+  board.position.set(0, 6.6, 0);
+  g.add(board);
+
+  // Top beacon lamps
+  const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+  for (const lx of [-3.8, 0, 3.8]) {
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.18, 0.75), bulbMat);
+    lamp.position.set(lx, 8.92, 0.45);
+    g.add(lamp);
+  }
+
+  return g;
+}
+
+export function buildBikersRestRoom(textures: ProceduralTextureSet): THREE.Group {
+  const lounge = new THREE.Group();
+  const timberMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.78 });
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.65 });
+  const roofMat = new THREE.MeshPhysicalMaterial({ color: 0x0284c7, roughness: 0.25, clearcoat: 0.6 });
+  const accentMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.8 });
+  const benchMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.7 });
+
+  // Glowing Rest Pad directly along the service bay edge (z = +5.2 local, centered along X)
+  const pad = new THREE.Mesh(
+    new THREE.PlaneGeometry(16, 7.6),
+    new THREE.MeshBasicMaterial({ map: textures.restRoomPad })
+  );
+  pad.rotation.x = -Math.PI / 2;
+  pad.position.set(0, 0.04, 4.2);
+  lounge.add(pad);
+
+  // Raised Lounge Deck behind pad (z = -3.8)
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(16, 0.24, 7.2), new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 }));
+  deck.position.set(0, 0.12, -3.8);
+  deck.receiveShadow = true;
+  lounge.add(deck);
+
+  // Back wall + Pergola columns + Illuminated Roof
+  const backWall = new THREE.Mesh(new THREE.BoxGeometry(15.2, 3.4, 0.45), wallMat);
+  backWall.position.set(0, 1.9, -7.1);
+  backWall.castShadow = true;
+  lounge.add(backWall);
+
+  for (const px of [-7.2, -2.4, 2.4, 7.2]) {
+    const col = new THREE.Mesh(new THREE.BoxGeometry(0.28, 3.6, 0.28), timberMat);
+    col.position.set(px, 2.0, -0.5);
+    col.castShadow = true;
+    lounge.add(col);
+  }
+
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(16.6, 0.28, 8.2), roofMat);
+  roof.position.set(0, 3.9, -3.7);
+  roof.castShadow = true;
+  lounge.add(roof);
+
+  const neonTrim = new THREE.Mesh(new THREE.BoxGeometry(16.7, 0.14, 0.18), accentMat);
+  neonTrim.position.set(0, 3.76, 0.42);
+  lounge.add(neonTrim);
+
+  // Prominent Bikers Rest Room Facade Sign
+  const sign = new THREE.Mesh(
+    new THREE.BoxGeometry(12.2, 2.1, 0.22),
+    new THREE.MeshBasicMaterial({ map: textures.restRoomSign })
+  );
+  sign.position.set(0, 4.95, -0.35);
+  lounge.add(sign);
+
+  // Tea Counter & Outdoor Benches
+  const counter = new THREE.Mesh(new THREE.BoxGeometry(5.2, 1.05, 1.1), timberMat);
+  counter.position.set(-4.2, 0.72, -5.2);
+  lounge.add(counter);
+
+  for (const bx of [1.8, 5.2]) {
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.55, 0.8), benchMat);
+    bench.position.set(bx, 0.48, -3.4);
+    lounge.add(bench);
+  }
+
+  // Parked display Hero bike outside the rest room
+  const parkedBike = buildHeroMotorcycle(textures, 'xtreme_160r');
+  parkedBike.group.position.set(5.5, 0.24, -1.6);
+  parkedBike.group.rotation.y = -0.65;
+  lounge.add(parkedBike.group);
+
+  return lounge;
+}
+
+export function buildNeelaMarketStalls(textures: ProceduralTextureSet): THREE.Group {
+  const market = new THREE.Group();
+  const canopyPalette = [0xe11d48, 0x059669, 0xd97706, 0x2563eb, 0x9333ea];
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.85 });
+  const ironMat = new THREE.MeshStandardMaterial({ color: 0x18181b, metalness: 0.7, roughness: 0.45 });
+  const curryMat = new THREE.MeshPhysicalMaterial({ color: 0x9a3412, roughness: 0.2, clearcoat: 0.8 });
+  const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfde047 });
+
+  // Overhead Neela Market Arch Banner
+  const archPostL = new THREE.Mesh(new THREE.BoxGeometry(0.45, 5.8, 0.45), woodMat);
+  archPostL.position.set(-14, 2.9, 0);
+  const archPostR = archPostL.clone();
+  archPostR.position.set(14, 2.9, 0);
+  const signBoard = new THREE.Mesh(
+    new THREE.BoxGeometry(13.5, 2.2, 0.24),
+    new THREE.MeshBasicMaterial({ map: textures.neelaMarketSign })
+  );
+  signBoard.position.set(0, 5.4, 0);
+  market.add(archPostL, archPostR, signBoard);
+
+  // Row of colorful Neela Market roadside stalls, karai pots & hanging warm bulbs
+  for (let i = 0; i < 6; i++) {
+    const sx = -26 + i * 10.4;
+    const stall = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.05, 3.0), woodMat);
+    base.position.y = 0.52;
+    const roof = new THREE.Mesh(
+      new THREE.BoxGeometry(4.8, 0.2, 3.6),
+      new THREE.MeshStandardMaterial({ color: canopyPalette[i % canopyPalette.length], roughness: 0.6 })
+    );
+    roof.position.y = 2.6;
+    roof.rotation.x = 0.08;
+    for (const cx of [-1.9, 1.9]) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.7, 6), woodMat);
+      pole.position.set(cx, 1.75, 1.3);
+      stall.add(pole);
+    }
+    const karai = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.34, 0.28, 12), ironMat);
+    karai.position.set(-0.8, 1.15, 0.45);
+    const stew = new THREE.Mesh(new THREE.CylinderGeometry(0.49, 0.49, 0.06, 12), curryMat);
+    stew.position.set(-0.8, 1.28, 0.45);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), bulbMat);
+    bulb.position.set(0, 2.38, 1.25);
+    stall.add(base, roof, karai, stew, bulb);
+    stall.position.set(sx, 0, -4.5);
+    market.add(stall);
+  }
+
+  return market;
+}
+
+export function buildDuckMeatStall(textures: ProceduralTextureSet, variant = 0): THREE.Group {
+  const stall = new THREE.Group();
+  const bambooMat = new THREE.MeshStandardMaterial({ color: 0xa16207, roughness: 0.85 });
+  const counterMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.78 });
+  const tinColors = [0xb91c1c, 0x047857, 0xd97706];
+  const tinMat = new THREE.MeshStandardMaterial({
+    color: tinColors[variant % tinColors.length],
+    roughness: 0.48,
+    metalness: 0.35,
+  });
+  const ironMat = new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.72, roughness: 0.42 });
+  const duckCurryMat = new THREE.MeshPhysicalMaterial({
+    color: 0x7c2d12,
+    roughness: 0.16,
+    clearcoat: 0.9,
+    emissive: 0x431407,
+    emissiveIntensity: 0.35,
+  });
+  const emberMat = new THREE.MeshStandardMaterial({
+    color: 0xf97316,
+    emissive: 0xea580c,
+    emissiveIntensity: 1.8,
+  });
+  const pithaMat = new THREE.MeshStandardMaterial({ color: 0xfef3c7, roughness: 0.85 });
+  const lanternMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+
+  // Bamboo corner posts & corrugated shed roof
+  for (const [px, pz] of [
+    [-3.1, -1.8],
+    [3.1, -1.8],
+    [-3.1, 1.8],
+    [3.1, 1.8],
+  ]) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 3.1, 8), bambooMat);
+    pole.position.set(px, 1.55, pz);
+    pole.castShadow = true;
+    stall.add(pole);
+  }
+
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(7.0, 0.18, 4.5), tinMat);
+  roof.position.set(0, 3.15, 0);
+  roof.rotation.x = 0.09;
+  roof.castShadow = true;
+  stall.add(roof);
+
+  // Timber front counter & warm charcoal stoves
+  const counter = new THREE.Mesh(new THREE.BoxGeometry(5.9, 1.0, 1.45), counterMat);
+  counter.position.set(0, 0.5, 0.65);
+  counter.castShadow = true;
+  stall.add(counter);
+
+  for (const kx of [-1.75, 0.15]) {
+    const stove = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.7, 0.42, 12), emberMat);
+    stove.position.set(kx, 1.08, 0.65);
+    const karai = new THREE.Mesh(new THREE.CylinderGeometry(0.74, 0.42, 0.34, 14), ironMat);
+    karai.position.set(kx, 1.32, 0.65);
+    const curry = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.66, 0.08, 14), duckCurryMat);
+    curry.position.set(kx, 1.47, 0.65);
+    stall.add(stove, karai, curry);
+  }
+
+  // Stacked Chitoi Pitha clay basket on counter
+  const platter = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.55, 0.14, 12), bambooMat);
+  platter.position.set(1.9, 1.07, 0.65);
+  const pithaStack = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.52, 0.24, 10), pithaMat);
+  pithaStack.position.set(1.9, 1.24, 0.65);
+  stall.add(platter, pithaStack);
+
+  // Roadside dining benches in front for hungry riders
+  for (const bx of [-1.6, 1.6]) {
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.48, 0.72), counterMat);
+    bench.position.set(bx, 0.24, 2.35);
+    stall.add(bench);
+  }
+
+  // Hanging yellow market lanterns + bright Duck Meat sign
+  for (const lx of [-2.2, 0, 2.2]) {
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), lanternMat);
+    bulb.position.set(lx, 2.86, 1.95);
+    stall.add(bulb);
+  }
+
+  const sign = new THREE.Mesh(
+    new THREE.BoxGeometry(6.2, 1.45, 0.18),
+    new THREE.MeshBasicMaterial({ map: textures.duckStallSign })
+  );
+  sign.position.set(0, 3.92, 1.85);
+  stall.add(sign);
+
+  return stall;
+}
+
+export function buildExpresswayBillboard(tex: THREE.CanvasTexture): THREE.Group {
+  const g = new THREE.Group();
+  const steelMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.78, roughness: 0.28 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.35, metalness: 0.42 });
+  const boardMat = new THREE.MeshBasicMaterial({ map: tex });
+  const lampMat = new THREE.MeshBasicMaterial({ color: 0xfef9c3 });
+
+  for (const px of [-4.2, 4.2]) {
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 7.6, 10), steelMat);
+    col.position.set(px, 3.8, 0);
+    col.castShadow = true;
+    g.add(col);
+  }
+
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(13.6, 5.1, 0.45), trimMat);
+  frame.position.set(0, 8.3, 0);
+  frame.castShadow = true;
+  g.add(frame);
+
+  const board = new THREE.Mesh(new THREE.BoxGeometry(13.1, 4.7, 0.52), boardMat);
+  board.position.set(0, 8.3, 0);
+  g.add(board);
+
+  for (const lx of [-4.4, 0, 4.4]) {
+    const flood = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.18, 0.9), lampMat);
+    flood.position.set(lx, 11.0, 0.55);
+    g.add(flood);
+  }
+
+  return g;
+}
+
+export function buildExpresswayBuilding(
+  width: number,
+  height: number,
+  depth: number,
+  facadeTex: THREE.CanvasTexture,
+  signTex: THREE.CanvasTexture,
+  isResort = false
+): THREE.Group {
+  const g = new THREE.Group();
+  const wallMat = new THREE.MeshStandardMaterial({ map: facadeTex, roughness: 0.55, metalness: 0.15 });
+  const glassMat = new THREE.MeshPhysicalMaterial({
+    color: isResort ? 0x0ea5e9 : 0x38bdf8,
+    roughness: 0.12,
+    metalness: 0.25,
+    clearcoat: 0.9,
+    emissive: isResort ? 0x0369a1 : 0x0c4a6e,
+    emissiveIntensity: 0.55,
+  });
+  const podiumMat = new THREE.MeshStandardMaterial({
+    color: isResort ? 0x78350f : 0x1e293b,
+    roughness: 0.65,
+  });
+
+  // Main Tower or Resort Pavilion
+  const body = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), wallMat);
+  body.position.y = height * 0.5;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  g.add(body);
+
+  // Illuminated GTA-style vertical glass curtain band
+  const glassStrip = new THREE.Mesh(
+    new THREE.BoxGeometry(width * 0.68, height * 0.78, depth + 0.18),
+    glassMat
+  );
+  glassStrip.position.y = height * 0.52;
+  g.add(glassStrip);
+
+  // Rooftop crown / pergola trim
+  const crown = new THREE.Mesh(new THREE.BoxGeometry(width + 0.8, 0.7, depth + 0.8), podiumMat);
+  crown.position.y = height + 0.35;
+  g.add(crown);
+
+  const roofGlow = new THREE.Mesh(
+    new THREE.BoxGeometry(width + 0.9, 0.18, depth + 0.9),
+    new THREE.MeshStandardMaterial({
+      color: isResort ? 0xf59e0b : 0x38bdf8,
+      emissive: isResort ? 0xd97706 : 0x0284c7,
+      emissiveIntensity: 1.1,
+    })
+  );
+  roofGlow.position.y = height + 0.75;
+  g.add(roofGlow);
+
+  // Road-facing billboard sign
+  const sign = new THREE.Mesh(
+    new THREE.BoxGeometry(Math.min(width * 0.95, 11.5), 2.3, 0.28),
+    new THREE.MeshBasicMaterial({ map: signTex })
+  );
+  sign.position.set(0, Math.min(height * 0.45, 5.2), depth * 0.5 + 0.24);
+  g.add(sign);
+
+  return g;
+}
+
+export function buildUTurnSignArch(tex: THREE.CanvasTexture, spanWidth = 24): THREE.Group {
+  const arch = new THREE.Group();
+  const steelMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.72, roughness: 0.35 });
+  const half = spanWidth / 2;
+
+  for (const sx of [-half, half]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 5.8, 8), steelMat);
+    post.position.set(sx, 2.9, 0);
+    post.castShadow = true;
+    arch.add(post);
+  }
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(spanWidth + 0.8, 0.28, 0.28), steelMat);
+  beam.position.set(0, 5.7, 0);
+  arch.add(beam);
+
+  const sign = new THREE.Mesh(
+    new THREE.BoxGeometry(Math.min(13.5, spanWidth * 0.65), 2.3, 0.2),
+    new THREE.MeshBasicMaterial({ map: tex })
+  );
+  sign.position.set(0, 5.0, 0);
+  arch.add(sign);
+
+  return arch;
+}
+
+export function buildFlyoverLampPost(side: -1 | 1, accentTheme: 'sky' | 'gold' = 'sky'): THREE.Group {
+  const lamp = new THREE.Group();
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.78, roughness: 0.28 });
+  const flangeMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.22 });
+  const accentHex = accentTheme === 'gold' ? 0xf59e0b : 0x38bdf8;
+  const accentEmissive = accentTheme === 'gold' ? 0xd97706 : 0x0284c7;
+  const accentGlowMat = new THREE.MeshStandardMaterial({
+    color: accentHex,
+    emissive: accentEmissive,
+    emissiveIntensity: 1.5,
+    roughness: 0.25,
+  });
+  const headMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.72, roughness: 0.3 });
+  const ledMat = new THREE.MeshStandardMaterial({
+    color: 0xfef9c3,
+    emissive: 0xfde047,
+    emissiveIntensity: 2.0,
+  });
+
+  const inward = -side;
+
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 0.42, 8), flangeMat);
+  base.position.y = 0.21;
+  lamp.add(base);
+
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.14, 5.4, 8), poleMat);
+  mast.position.y = 2.9;
+  lamp.add(mast);
+
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.145, 0.145, 0.22, 10), accentGlowMat);
+  collar.position.y = 3.2;
+  lamp.add(collar);
+
+  const upperCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.16, 10), accentGlowMat);
+  upperCollar.position.y = 5.1;
+  lamp.add(upperCollar);
+
+  const lowerArm = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.11, 0.11), poleMat);
+  lowerArm.position.set(inward * 0.48, 5.78, 0);
+  lowerArm.rotation.z = side * 0.34;
+  lamp.add(lowerArm);
+
+  const brace = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.07, 0.07), flangeMat);
+  brace.position.set(inward * 0.35, 5.25, 0);
+  brace.rotation.z = side * 0.62;
+  lamp.add(brace);
+
+  const upperArm = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.1, 0.12), poleMat);
+  upperArm.position.set(inward * 1.48, 6.08, 0);
+  upperArm.rotation.z = side * 0.1;
+  lamp.add(upperArm);
+
+  const housing = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.16, 0.42), headMat);
+  housing.position.set(inward * 2.15, 6.14, 0);
+  lamp.add(housing);
+
+  const topAccent = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.06, 0.3), accentGlowMat);
+  topAccent.position.set(inward * 2.15, 6.24, 0);
+  lamp.add(topAccent);
+
+  const ledLens = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.08, 0.32), ledMat);
+  ledLens.position.set(inward * 2.15, 6.04, 0);
+  lamp.add(ledLens);
+
+  return lamp;
+}
+
+export function buildFlyoverBannerArch(
+  tex: THREE.CanvasTexture,
+  spanWidth = 8.2,
+  clearanceY = 5.05,
+  accentColor = 0xfacc15
+): THREE.Group {
+  const arch = new THREE.Group();
+  const steelMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.78, roughness: 0.3 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.35, metalness: 0.45 });
+  const boardMat = new THREE.MeshBasicMaterial({ map: tex });
+  const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+
+  const half = spanWidth * 0.5;
+  const topY = clearanceY + 1.05;
+
+  for (const sx of [-half, half]) {
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, topY, 8), steelMat);
+    col.position.set(sx, topY * 0.5, 0);
+    col.castShadow = true;
+    arch.add(col);
+
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.25, 8), trimMat);
+    collar.position.set(sx, topY - 0.3, 0);
+    arch.add(collar);
+  }
+
+  const crossBeam = new THREE.Mesh(new THREE.BoxGeometry(spanWidth + 0.55, 0.24, 0.28), steelMat);
+  crossBeam.position.set(0, topY, 0);
+  arch.add(crossBeam);
+
+  const frameW = Math.max(6.8, spanWidth - 0.45);
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(frameW + 0.24, 1.84, 0.22), trimMat);
+  frame.position.set(0, clearanceY, 0);
+  arch.add(frame);
+
+  const board = new THREE.Mesh(new THREE.BoxGeometry(frameW, 1.66, 0.26), boardMat);
+  board.position.set(0, clearanceY, 0);
+  arch.add(board);
+
+  for (const lx of [-frameW * 0.32, 0, frameW * 0.32]) {
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.12, 0.62), bulbMat);
+    lamp.position.set(lx, clearanceY + 1.0, 0);
+    arch.add(lamp);
+  }
+
+  return arch;
+}
+
+
 

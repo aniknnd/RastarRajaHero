@@ -176,6 +176,19 @@ export interface HudMission {
 
 export type MotionStatus = 'off' | 'waiting' | 'active' | 'unsupported' | 'denied' | 'insecure';
 
+export type EnvironmentPresetId = 'morning' | 'afternoon' | 'sunset' | 'night';
+
+export const ENVIRONMENT_PRESETS: readonly {
+  id: EnvironmentPresetId;
+  labelBn: string;
+  labelEn: string;
+}[] = [
+  { id: 'morning', labelBn: 'সকাল', labelEn: 'Morning' },
+  { id: 'afternoon', labelBn: 'দুপুর', labelEn: 'Afternoon' },
+  { id: 'sunset', labelBn: 'গোধূলি', labelEn: 'GTA 6 Sunset' },
+  { id: 'night', labelBn: 'রাত', labelEn: 'Neon Night' },
+] as const;
+
 export interface HudSnapshot {
   gameState: GameState;
   score: number;
@@ -194,6 +207,7 @@ export interface HudSnapshot {
   nearestPumpMeters: number;
   isInShowroomZone: boolean;
   nearestShowroomMeters: number;
+  isInRestRoomZone: boolean;
   nextUnlockBikeId: BikeTierId | null;
   combo: number;
   comboTimerNorm: number; // 0..1
@@ -216,15 +230,17 @@ export interface HudSnapshot {
   gameOverRoastsBn: string[];
   lapCount: number;
   zoneLabelBn: string;
+  routeHintBn: string;
   upcomingLight: TrafficLightPhase | null;
   upcomingLightMeters: number;
   sfxMuted: boolean;
   musicMuted: boolean;
   motionStatus: MotionStatus;
+  environmentPreset: EnvironmentPresetId;
 }
 
 export const GAME_CONFIG = {
-  LOOP_LENGTH: 720, // 9 blocks * 80m seamless endless Dhaka loop
+  LOOP_LENGTH: 720, // Metro start segment 9 blocks * 80m
   BLOCK_LENGTH: 80,
   BLOCK_COUNT: 9,
   ARTERY_HALF_WIDTH: 9.6, // -9.6 to +9.6
@@ -241,6 +257,8 @@ export const GAME_CONFIG = {
   FUEL_REFILL_RATE_PER_SEC: 55,
   SHOWROOM_PAD_HALF_LENGTH: 11.5,
   SHOWROOM_MAX_SPEED_KMH: 25,
+  RESTROOM_PAD_HALF_LENGTH: 11.5,
+  RESTROOM_MAX_SPEED_KMH: 26,
   EMPTY_STOPPED_GAMEOVER_SEC: 4.0,
   BIKE_SCALE: 0.62,
   MAX_SPEED_NORMAL_MPS: 38,
@@ -250,14 +268,58 @@ export const GAME_CONFIG = {
   MAX_REVERSE_MPS: 8.5,
   SPEED_KMH_FACTOR: 3.4,
   TRAFFIC_SPEED_BOOST: 1.25,
-  ARTERY_TRAFFIC_COUNT: 32,
-  CITY_TRAFFIC_COUNT: 28,
+  ARTERY_TRAFFIC_COUNT: 42,
+  CITY_TRAFFIC_COUNT: 32,
   HIGH_SPEED_MSG_THRESHOLD_KMH: 80,
-  TITAN_TRAFFIC_CAP: 5, // Max smashRank-3 Titans (double-decker/tanker/fire/army/monster) on the road at once
+  TITAN_TRAFFIC_CAP: 6, // Max smashRank-3 Titans (double-decker/tanker/fire/army/monster) on the road at once
   BEST_SCORE_STORAGE_KEY: 'hero_rastar_raja_best_score_v2',
   HERO_BANK_STORAGE_KEY: 'hero_rastar_raja_bank_v1',
   UNLOCKED_BIKES_STORAGE_KEY: 'hero_rastar_raja_unlocked_bikes_v1',
   EQUIPPED_BIKE_STORAGE_KEY: 'hero_rastar_raja_equipped_bike_v1',
+} as const;
+
+export const CORRIDOR_CONFIG = {
+  // Metro extension: Farmgate -> Agargaon Metro -> Tejgaon Turnoff
+  METRO_EXT_MIN_Z: -1240,
+  AGARGAON_STATION_Z: -920,
+  TEJGAON_TURNOFF_Z: -1120,
+  METRO_END_UTURN_Z: -1220,
+
+  // Tejgaon -> Mohakhali -> Banani -> Kuril -> Uttara North Highway Spine
+  SPINE_X: 140,
+  SPINE_HALF_WIDTH: 10.4, // x = 129.6..150.4
+  SPINE_LANES: [133.25, 136.75, 143.25, 146.75] as readonly number[], // 133.25/136.75 North (-Z); 143.25/146.75 South (+Z)
+  SPINE_MAX_Z: -1020,
+  SPINE_MIN_Z: -3740,
+  TEJGAON_SHOWROOM_Z: -1240,
+  TEJGAON_PUMP_Z: -1540,
+  MOHAKHALI_FLYOVER_START_Z: -1780,
+  MOHAKHALI_FLYOVER_END_Z: -2020,
+  MOHAKHALI_FLYOVER_PEAK_Y: 4.8,
+  BANANI_PUMP_Z: -2280,
+  BANANI_FLYOVER_START_Z: -2420,
+  BANANI_FLYOVER_END_Z: -2680,
+  BANANI_FLYOVER_PEAK_Y: 5.2,
+  KURIL_SPLIT_Z: -2920,
+  UTTARA_PUMP_Z: -3360,
+  UTTARA_SHOWROOM_Z: -3540,
+  UTTARA_UTURN_Z: -3680,
+
+  // 300 Feet / Purbachal 6-Lane Expressway
+  EXPRESSWAY_Z: -2920,
+  EXPRESSWAY_MIN_X: 140,
+  EXPRESSWAY_MAX_X: 2240,
+  EXPRESSWAY_HALF_WIDTH: 22, // z = -2942 .. -2898
+  EXPRESSWAY_OUTBOUND_LANES_Z: [-2934.5, -2930.5, -2926.5] as readonly number[], // East (+X) Keep-Left (North side)
+  EXPRESSWAY_INBOUND_LANES_Z: [-2913.5, -2909.5, -2905.5] as readonly number[], // West (-X) Keep-Left (South side)
+  EXPRESSWAY_CANAL_MIN_Z: -2922.5,
+  EXPRESSWAY_CANAL_MAX_Z: -2917.5,
+  EXPRESSWAY_SOUTH_PUMP_X: 920,
+  EXPRESSWAY_NORTH_PUMP_X: 1750,
+  NEELA_MARKET_X: 1380,
+  NEELA_SHOWROOM_X: 1340,
+  NEELA_RESTROOM_X: 1420,
+  PURBACHAL_UTURN_X: 2170,
 } as const;
 
 export const VEHICLE_SPECS: Record<VehicleKind, VehicleSpec> = {

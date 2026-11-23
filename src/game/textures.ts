@@ -55,6 +55,37 @@ export interface ProceduralTextureSet {
   jokeSigns: THREE.Texture[];
   trafficControlSigns: THREE.CanvasTexture[];
   accidentSloganSign: THREE.CanvasTexture;
+  tejgaonTurnBillboard: THREE.CanvasTexture;
+  kurilSplitGantry: THREE.CanvasTexture;
+  expresswayRoad: THREE.CanvasTexture;
+  canalWater: THREE.CanvasTexture;
+  neelaMarketSign: THREE.CanvasTexture;
+  restRoomSign: THREE.CanvasTexture;
+  restRoomPad: THREE.CanvasTexture;
+  uturnLoopRoad: THREE.CanvasTexture;
+  turnPavementArrow: THREE.CanvasTexture;
+  bridgeCrossRoad: THREE.CanvasTexture;
+  flyoverSlipArrow: THREE.CanvasTexture;
+  routeBadgeUttara: THREE.CanvasTexture;
+  routeBadge300ft: THREE.CanvasTexture;
+  expresswayBillboards: THREE.CanvasTexture[];
+  duckStallSign: THREE.CanvasTexture;
+  baluBridgeSign: THREE.CanvasTexture;
+  restaurantSigns: THREE.CanvasTexture[];
+  flyoverFunnyBanners: THREE.CanvasTexture[];
+  uturnSigns: {
+    metroEnd: THREE.CanvasTexture;
+    tejgaonSouth: THREE.CanvasTexture;
+    uttara: THREE.CanvasTexture;
+    purbachal: THREE.CanvasTexture;
+  };
+  corridorGantries: {
+    tejgaon: THREE.CanvasTexture;
+    mohakhali: THREE.CanvasTexture;
+    banani: THREE.CanvasTexture;
+    expressway300ft: THREE.CanvasTexture;
+    uttara: THREE.CanvasTexture;
+  };
   contactShadow: THREE.CanvasTexture;
   dispose: () => void;
 }
@@ -503,6 +534,7 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     { bn: 'ফার্মগেট স্টেশন', en: 'FARMGATE • ঢাকা মেট্রো রেল (MRT-6)' },
     { bn: 'শাহবাগ স্টেশন', en: 'SHAHBAG • ঢাকা মেট্রো রেল (MRT-6)' },
     { bn: 'মতিঝিল স্টেশন', en: 'MOTIJHEEL • ঢাকা মেট্রো রেল (MRT-6)' },
+    { bn: 'আগারগাঁও স্টেশন', en: 'AGARGAON • সামনেই তেজগাঁও টার্ন ➡' },
   ];
   const metroStationBoards = stationDefs.map((st) => {
     const [c, ctx] = makeCanvas(1024, 224);
@@ -1050,6 +1082,626 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     return track(tex);
   })();
 
+  // 21. Tejgaon Turnoff Billboard ("তেজগাঁও এই দিকে ➡")
+  const tejgaonTurnBillboard = (() => {
+    const [c, ctx] = makeCanvas(1024, 384);
+    ctx.fillStyle = '#064e3b';
+    ctx.fillRect(0, 0, 1024, 384);
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 14;
+    ctx.strokeRect(10, 10, 1004, 364);
+
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(28, 28, 968, 78);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fef08a';
+    ctx.font = 'bold 40px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('হিরো মোটরস করিডোর  •  আগারগাঁও লিংক রোড', 512, 67);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 88px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('তেজগাঁও এই দিকে ➡', 512, 185);
+
+    ctx.fillStyle = '#a7f3d0';
+    ctx.font = 'bold 34px "Noto Sans Bengali", "Chakra Petch", sans-serif';
+    ctx.fillText('তেজগাঁও হিরো শোরুম · মহাখালী · বনানী · কুড়িল · ৩০০ ফিট', 512, 275);
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 26px "Chakra Petch", sans-serif';
+    ctx.fillText('TURN RIGHT INTO TEJGAON LINK ROAD  ➡', 512, 330);
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
+  // 22. Kuril Interchange Split Gantry ("⬆ উত্তরা  |  ৩০০ ফিট ➡")
+  const kurilSplitGantry = (() => {
+    const [c, ctx] = makeCanvas(1024, 320);
+    ctx.fillStyle = '#065f46';
+    ctx.fillRect(0, 0, 1024, 320);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 12;
+    ctx.strokeRect(10, 10, 1004, 300);
+
+    ctx.fillStyle = '#1e3a8a';
+    ctx.fillRect(22, 22, 470, 276);
+    ctx.fillStyle = '#047857';
+    ctx.fillRect(512, 22, 490, 276);
+    ctx.fillStyle = '#fde047';
+    ctx.fillRect(496, 22, 12, 276);
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 48px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('⬆ উত্তরা / এয়ারপোর্ট', 257, 92);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 32px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('সোজা যান • উত্তরা শোরুম ও ইউ-টার্ন', 257, 175);
+    ctx.fillStyle = '#93c5fd';
+    ctx.font = 'bold 24px "Chakra Petch", sans-serif';
+    ctx.fillText('STRAIGHT AHEAD TO UTTARA', 257, 240);
+
+    ctx.fillStyle = '#fef08a';
+    ctx.font = 'bold 48px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('৩০০ ফিট (পূর্বাচল) ➡', 757, 92);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 32px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('ফ্লাইওভারে উঠুন • নীলা মার্কেট', 757, 175);
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 24px "Chakra Petch", sans-serif';
+    ctx.fillText('TAKE FLYOVER RAMP TO 300 FT', 757, 240);
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
+  // 23. 300 Feet 3-Lane One-Way Expressway Asphalt (repeats cleanly along X)
+  const expresswayRoad = (() => {
+    const [c, ctx] = makeCanvas(512, 512);
+    ctx.fillStyle = '#292e36';
+    ctx.fillRect(0, 0, 512, 512);
+    for (let i = 0; i < 4000; i++) {
+      const x = (i * 71) % 512;
+      const y = (i * 193 + Math.floor(i / 5) * 11) % 512;
+      const v = 38 + ((i * 23) % 20);
+      ctx.fillStyle = `rgb(${v},${v + 2},${v + 6})`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+    // Crisp solid outer highway edges (yellow inner canal edge, white outer shoulder)
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(10, 0, 10, 512);
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(492, 0, 10, 512);
+    // Two dashed lane dividers for 3 expressway lanes!
+    ctx.fillStyle = '#f1f5f9';
+    for (let y = 12; y < 512; y += 64) {
+      ctx.fillRect(170, y, 8, 36);
+      ctx.fillRect(334, y, 8, 36);
+    }
+    return track(finalizeColorTexture(c, aniso, 1, 24));
+  })();
+
+  // 24. 300 Feet Central Water Canal
+  const canalWater = (() => {
+    const [c, ctx] = makeCanvas(256, 512);
+    const grad = ctx.createLinearGradient(0, 0, 256, 0);
+    grad.addColorStop(0, '#0f766e');
+    grad.addColorStop(0.5, '#0284c7');
+    grad.addColorStop(1, '#0f766e');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 256, 512);
+    for (let i = 0; i < 320; i++) {
+      const x = (i * 59) % 230 + 10;
+      const y = (i * 137) % 500;
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(186,230,253,0.28)' : 'rgba(13,148,136,0.35)';
+      ctx.fillRect(x, y, 18 + (i % 24), 4);
+    }
+    return track(finalizeColorTexture(c, aniso, 1, 30));
+  })();
+
+  // 25. Neela Market Sign
+  const neelaMarketSign = (() => {
+    const [c, ctx] = makeCanvas(768, 224);
+    ctx.fillStyle = '#7c2d12';
+    ctx.fillRect(0, 0, 768, 224);
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(0, 0, 768, 24);
+    ctx.fillRect(0, 200, 768, 24);
+    ctx.strokeStyle = '#fef08a';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(12, 32, 744, 160);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 58px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('নীলা মার্কেট • পূর্বাচল ৩০০ ফিট', 384, 96);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 28px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('হিরো শোরুম  •  বাইকারস রেস্ট রুম  •  দেশি খাবার ও চা', 384, 158);
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
+  // 26. Bikers Rest Room Sign & Pad
+  const restRoomSign = (() => {
+    const [c, ctx] = makeCanvas(768, 224);
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, 768, 224);
+    ctx.fillStyle = '#0284c7';
+    ctx.fillRect(0, 0, 768, 22);
+    ctx.fillStyle = '#10b981';
+    ctx.fillRect(0, 202, 768, 22);
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(12, 30, 744, 164);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 52px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('বাইকারস রেস্ট রুম • হিরো পয়েন্ট', 384, 92);
+    ctx.fillStyle = '#fef08a';
+    ctx.font = 'bold 28px "Noto Sans Bengali", "Chakra Petch", sans-serif';
+    ctx.fillText('BIKERS REST ROOM  •  চা-নাস্তা, বিশ্রাম ও ফুল ট্যাংক ফ্রি!', 384, 156);
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
+  const restRoomPad = (() => {
+    const [c, ctx] = makeCanvas(512, 512);
+    ctx.fillStyle = '#0c4a6e';
+    ctx.fillRect(0, 0, 512, 512);
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 18;
+    ctx.strokeRect(14, 14, 484, 484);
+    ctx.fillStyle = '#075985';
+    ctx.fillRect(42, 42, 428, 428);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 54px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('বাইকারস রেস্ট রুম', 256, 165);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 42px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('থামুন • বিশ্রাম ও চা', 256, 265);
+    ctx.fillStyle = '#67e8f9';
+    ctx.font = 'bold 34px "Chakra Petch", sans-serif';
+    ctx.fillText('REST + FULL FUEL + NITRO', 256, 360);
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
+  const makeUTurnTex = (titleBn: string, subBn: string, bg: string): THREE.CanvasTexture => {
+    const [c, ctx] = makeCanvas(768, 200);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 768, 200);
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 10;
+    ctx.strokeRect(8, 8, 752, 184);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 48px "Noto Sans Bengali", sans-serif';
+    ctx.fillText(titleBn, 384, 76);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 28px "Noto Sans Bengali", "Chakra Petch", sans-serif';
+    ctx.fillText(subBn, 384, 144);
+    return track(finalizeColorTexture(c, aniso));
+  };
+
+  const makeGantryTex = (topLine: string, midLine: string, bottomLine: string, bg: string): THREE.CanvasTexture => {
+    const [c, ctx] = makeCanvas(768, 224);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 768, 224);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 10;
+    ctx.strokeRect(10, 10, 748, 204);
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(10, 82, 748, 4);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 38px "Noto Sans Bengali", sans-serif';
+    ctx.fillText(topLine, 384, 48);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 34px "Noto Sans Bengali", sans-serif';
+    ctx.fillText(midLine, 384, 126);
+    ctx.fillStyle = '#bbf7d0';
+    ctx.font = 'bold 22px "Chakra Petch", sans-serif';
+    ctx.fillText(bottomLine, 384, 182);
+    return track(finalizeColorTexture(c, aniso));
+  };
+
+  // 27. U-Turn Loop Road Texture (curved dashed turnaround arcs + ↺ U-TURN arrows + chevron tip)
+  const uturnLoopRoad = (() => {
+    const [c, ctx] = makeCanvas(512, 512);
+    ctx.fillStyle = '#292e36';
+    ctx.fillRect(0, 0, 512, 512);
+    for (let i = 0; i < 3000; i++) {
+      const x = (i * 79) % 512;
+      const y = (i * 191 + Math.floor(i / 6) * 13) % 512;
+      const v = 38 + ((i * 19) % 20);
+      ctx.fillStyle = `rgb(${v},${v + 2},${v + 6})`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+    // Red-white chevron top turnaround bumper strip (at -Z / top of canvas)
+    for (let x = 0; x < 512; x += 64) {
+      ctx.fillStyle = (x / 64) % 2 === 0 ? '#dc2626' : '#f8fafc';
+      ctx.fillRect(x, 0, 64, 26);
+    }
+    // Outer white turnaround edge
+    ctx.strokeStyle = '#f8fafc';
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.arc(256, 256, 210, Math.PI, 0, false);
+    ctx.stroke();
+
+    // Inner bright yellow dashed U-turn guide arc
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 10;
+    ctx.setLineDash([28, 18]);
+    ctx.beginPath();
+    ctx.arc(256, 256, 138, Math.PI, 0, false);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Big crisp U-turn arrows painted on asphalt
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fef08a';
+    ctx.font = 'bold 64px "Noto Sans Bengali", "Chakra Petch", sans-serif';
+    ctx.fillText('↺ U-TURN', 256, 230);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 34px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('ইউ-টার্ন লুপ', 256, 300);
+
+    // Entry & exit lane arrows on bottom half
+    ctx.font = 'bold 54px sans-serif';
+    ctx.fillStyle = '#4ade80';
+    ctx.fillText('⬆', 118, 415);
+    ctx.fillStyle = '#fde047';
+    ctx.fillText('⬇', 394, 415);
+
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
+  // 28. Right-Turn Pavement Arrow Stencil ("তেজগাঁও ➡")
+  const turnPavementArrow = (() => {
+    const [c, ctx] = makeCanvas(512, 512);
+    ctx.fillStyle = '#2d3138';
+    ctx.fillRect(0, 0, 512, 512);
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 12;
+    ctx.strokeRect(12, 12, 488, 488);
+
+    // Big white painted turn arrow curving right
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 34;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(180, 430);
+    ctx.lineTo(180, 220);
+    ctx.quadraticCurveTo(180, 140, 270, 140);
+    ctx.lineTo(395, 140);
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(455, 140);
+    ctx.lineTo(375, 85);
+    ctx.lineTo(375, 195);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 54px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('তেজগাঁও ➡', 290, 325);
+    ctx.fillStyle = '#93c5fd';
+    ctx.font = 'bold 28px "Chakra Petch", sans-serif';
+    ctx.fillText('TURN RIGHT', 290, 385);
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
+  // 29. 300 Feet Canal Crossing Bridge Deck Texture
+  const bridgeCrossRoad = (() => {
+    const [c, ctx] = makeCanvas(512, 512);
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(0, 0, 512, 512);
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(18, 0, 14, 512);
+    ctx.fillRect(480, 0, 14, 512);
+    ctx.fillStyle = '#f8fafc';
+    for (let y = 24; y < 490; y += 72) {
+      ctx.fillRect(250, y, 12, 42);
+    }
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
+  // 30. Kuril Flyover Entry Pavement Arrow ("৩০০ ফিট ফ্লাইওভার ↗")
+  const flyoverSlipArrow = (() => {
+    const [c, ctx] = makeCanvas(512, 512);
+    ctx.fillStyle = '#2d3138';
+    ctx.fillRect(0, 0, 512, 512);
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 12;
+    ctx.strokeRect(12, 12, 488, 488);
+
+    ctx.strokeStyle = '#f8fafc';
+    ctx.lineWidth = 34;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(150, 435);
+    ctx.quadraticCurveTo(185, 245, 345, 115);
+    ctx.stroke();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath();
+    ctx.moveTo(395, 78);
+    ctx.lineTo(300, 92);
+    ctx.lineTo(366, 174);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 46px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('৩০০ ফিট ফ্লাইওভার', 270, 355);
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 26px "Chakra Petch", sans-serif';
+    ctx.fillText('KURIL FLYOVER RAMP', 270, 412);
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
+  // 31. Vehicle Route Destination Badges ("উত্তরা ⬆" vs "৩০০ ফিট ✈")
+  const makeRouteBadge = (bnLabel: string, enLabel: string, bg: string, border: string, accent: string) => {
+    const [c, ctx] = makeCanvas(256, 96);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 256, 96);
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 8;
+    ctx.strokeRect(4, 4, 248, 88);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 34px "Noto Sans Bengali", sans-serif';
+    ctx.fillText(bnLabel, 128, 36);
+    ctx.fillStyle = accent;
+    ctx.font = 'bold 18px "Chakra Petch", sans-serif';
+    ctx.fillText(enLabel, 128, 70);
+    return track(finalizeColorTexture(c, aniso));
+  };
+
+  const routeBadgeUttara = makeRouteBadge('উত্তরা ⬆', 'STRAIGHT UTTARA', '#14532d', '#4ade80', '#fde047');
+  const routeBadge300ft = makeRouteBadge('৩০০ ফিট ✈', 'KURIL FLYOVER', '#0c4a6e', '#38bdf8', '#fde047');
+
+  // 32. Real-time 300 Feet / Purbachal Expressway Billboards (Bashundhara, Balu Bridge, Jolshiri, Duck House, Resorts, Hero)
+  const makeExpresswayBillboard = (
+    topBadge: string,
+    headlineBn: string,
+    subLine: string,
+    enFooter: string,
+    bgTop: string,
+    bgBot: string,
+    accent: string
+  ): THREE.CanvasTexture => {
+    const [c, ctx] = makeCanvas(1024, 384);
+    const grad = ctx.createLinearGradient(0, 0, 1024, 384);
+    grad.addColorStop(0, bgTop);
+    grad.addColorStop(1, bgBot);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 1024, 384);
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 14;
+    ctx.strokeRect(10, 10, 1004, 364);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(28, 26, 968, 66);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = accent;
+    ctx.font = 'bold 34px "Noto Sans Bengali", "Chakra Petch", sans-serif';
+    ctx.fillText(topBadge, 512, 59, 930);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 68px "Noto Sans Bengali", sans-serif';
+    ctx.fillText(headlineBn, 512, 168, 940);
+
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = 'bold 34px "Noto Sans Bengali", sans-serif';
+    ctx.fillText(subLine, 512, 255, 930);
+
+    ctx.fillStyle = accent;
+    ctx.font = 'bold 24px "Chakra Petch", sans-serif';
+    ctx.fillText(enFooter, 512, 326, 920);
+    return track(finalizeColorTexture(c, aniso));
+  };
+
+  const expresswayBillboards: THREE.CanvasTexture[] = [
+    makeExpresswayBillboard(
+      'বসুন্ধরা আবাসিক ও স্পোর্টস সিটি • খিলক্ষেত - ৩০০ ফিট গেট',
+      'বসুন্ধরা R/A ও স্পোর্টস কমপ্লেক্স',
+      'আধুনিক আবাসন, স্টেডিয়াম ও শপিং জোন ডানে',
+      'BASHUNDHARA RESIDENTIAL & SPORTS CITY • 300 FT CORRIDOR',
+      '#1e3a8a',
+      '#0f172a',
+      '#fde047'
+    ),
+    makeExpresswayBillboard(
+      'জুলাই ৩৬ এক্সপ্রেসওয়ে • পূর্বাচল হাইওয়ে অথরিটি',
+      'বালু নদী ব্রিজ · সেক্টর ১ সামনে',
+      'গতিসীমা মেনে চলুন • লেন পরিবর্তন সাবধানে',
+      'JULY 36 EXPRESSWAY • BALU RIVER BRIDGE AHEAD',
+      '#065f46',
+      '#022c22',
+      '#6ee7b7'
+    ),
+    makeExpresswayBillboard(
+      'জলসিঁড়ি আবাসন • ন্যাচারাল গ্রিন সিটি',
+      'জলসিঁড়ি আবাসন ও লেকভিউ',
+      '৩০০ ফিট পূর্বাচল সেক্টর ১ সংযোগ সড়ক',
+      'JOLSHIRI ABASHON • MODERN TOWNSHIP PURBACHAL',
+      '#155e75',
+      '#083344',
+      '#fbbf24'
+    ),
+    makeExpresswayBillboard(
+      'পূর্বাচলের বিখ্যাত খাবার • আমানউল্লাহ ও দেশি হাঁস ঘর',
+      'নীলা মার্কেট হাঁসের মাংস ও চিতই পিঠা',
+      'কড়াইয়ে ভুনা দেশি হাঁস, ভর্তা ও গরম চা',
+      'NEELA MARKET SIGNATURE DUCK BHUNA • SECTOR 1 PURBACHAL',
+      '#991b1b',
+      '#450a0a',
+      '#fde047'
+    ),
+    makeExpresswayBillboard(
+      'বাণিজ্য মেলা ও ইকো ট্যুরিজম • সেক্টর ৪ ও ২১',
+      'ব্লু লেক ও নিঝুম পল্লী রিসোর্ট',
+      'বাংলাদেশ-চায়না ফ্রেন্ডশিপ এক্সপো সেন্টার সামনে',
+      'PURBACHAL BLUE LAKE • NIJHUM POLLI • EXHIBITION CENTRE',
+      '#581c87',
+      '#1e1b4b',
+      '#f472b6'
+    ),
+    makeExpresswayBillboard(
+      'নিলয় মোটরস লিমিটেড • অফিসিয়াল হাইওয়ে পার্টনার',
+      'হিরো কারিশমা XMR ২১০ • রাস্তার রাজা',
+      'নীলা মার্কেট শোরুম ও বাইকারস রেস্ট রুম সামনে',
+      'HERO MOTOCORP BANGLADESH • 300 FT RIDER ZONE',
+      '#b91c1c',
+      '#18181b',
+      '#facc15'
+    ),
+  ];
+
+  // 33. 300 Feet Duck Meat Stall Sign ("হাঁসের মাংস ও চিতই পিঠা")
+  const duckStallSign = (() => {
+    const [c, ctx] = makeCanvas(768, 224);
+    ctx.fillStyle = '#7c2d12';
+    ctx.fillRect(0, 0, 768, 224);
+    ctx.fillStyle = '#ea580c';
+    ctx.fillRect(0, 0, 768, 24);
+    ctx.fillRect(0, 200, 768, 24);
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(12, 32, 744, 160);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 54px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('হাঁসের মাংস ও চিতই পিঠা', 384, 92);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 28px "Noto Sans Bengali", "Chakra Petch", sans-serif';
+    ctx.fillText('গরম কড়াই ভুনা হাঁস • চালাই রুটি • নীলা মার্কেট ৩০০ ফিট', 384, 156);
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
+  // 34. Balu River Bridge & 300ft Restaurant/Resort Signs
+  const baluBridgeSign = makeGantryTex(
+    'বালু নদী ব্রিজ • BALU RIVER BRIDGE',
+    'নীলা মার্কেট ও পূর্বাচল সেক্টর ১ সামনে',
+    '300 FT EXPRESSWAY • BALU CANAL CROSSING',
+    '#0f766e'
+  );
+
+  const restaurantSigns: THREE.CanvasTexture[] = [
+    makeUTurnTex('রিকশা ক্যাফে ও দ্য স্পট • ৩০০ ফিট', 'লাইভ বি.বি.কিউ · ওপেন এয়ার আড্ডা • বসুন্ধরা সংলগ্ন', '#1e293b'),
+    makeUTurnTex('নকশী পল্লী ও নিঝুম পল্লী রিসোর্ট', 'ব্লু লেক, কটেজ ও দেশি খাবার • পূর্বাচল ৩০০ ফিট', '#3f1d38'),
+  ];
+
+  // 35. Hilarious Dhaka Flyover Overhead Banners ("ফানি ব্যানার")
+  const makeFunnyFlyoverBanner = (
+    headlineBn: string,
+    punchlineBn: string,
+    tagEn: string,
+    bgTop: string,
+    bgBot: string,
+    border: string,
+    badgeBg: string
+  ): THREE.CanvasTexture => {
+    const [c, ctx] = makeCanvas(1024, 256);
+    const grad = ctx.createLinearGradient(0, 0, 1024, 256);
+    grad.addColorStop(0, bgTop);
+    grad.addColorStop(1, bgBot);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 1024, 256);
+
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 12;
+    ctx.strokeRect(8, 8, 1008, 240);
+
+    // Corner rickshaw-art style hazard stripes
+    ctx.fillStyle = badgeBg;
+    ctx.fillRect(20, 20, 984, 52);
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 28px "Chakra Petch", "Noto Sans Bengali", sans-serif';
+    ctx.fillText(tagEn, 512, 46, 940);
+
+    ctx.fillStyle = '#fef08a';
+    ctx.font = 'bold 52px "Noto Sans Bengali", sans-serif';
+    ctx.fillText(headlineBn, 512, 122, 950);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 38px "Noto Sans Bengali", sans-serif';
+    ctx.fillText(punchlineBn, 512, 198, 950);
+    return track(finalizeColorTexture(c, aniso));
+  };
+
+  const flyoverFunnyBanners: THREE.CanvasTexture[] = [
+    makeFunnyFlyoverBanner(
+      'ফ্লাইওভারে উড়াল দিচ্ছেন?',
+      'ভাই ব্রেকটাও সাথে নিছেন তো! 😜',
+      'DHAKA FLYOVER AIRLINES • CHECK BRAKES BEFORE TAKEOFF',
+      '#7f1d1d',
+      '#18181b',
+      '#facc15',
+      '#fde047'
+    ),
+    makeFunnyFlyoverBanner(
+      'উপরের ফ্লাইওভার ১০ তলা সমান!',
+      'সেলফি তুলতে গিয়া লেন ছাড়বেন না ভাই 🤳',
+      'KURIL UPPER SKYWAY (10.6M) • EYES ON THE ASPHALT',
+      '#0c4a6e',
+      '#0f172a',
+      '#38bdf8',
+      '#7dd3fc'
+    ),
+    makeFunnyFlyoverBanner(
+      'জ্যাম নাই বলে স্পিড ১৬০?!',
+      'আম্মু বাসায় জুতা হাতে ওয়েট করছে! 🩴',
+      'ZERO TRAFFIC ≠ ZERO GRAVITY • SLOW DOWN RIDER',
+      '#581c87',
+      '#1e1b4b',
+      '#f472b6',
+      '#fbcfe8'
+    ),
+    makeFunnyFlyoverBanner(
+      'গুগল ম্যাপ বলছে ডানে নামুন...',
+      'ভাই এটা ফ্লাইওভার, ডানে নামলে সোজা খাল! 🌊',
+      'TRUST THE FLYOVER RAMP • NOT YOUR COUSIN',
+      '#065f46',
+      '#022c22',
+      '#34d399',
+      '#6ee7b7'
+    ),
+    makeFunnyFlyoverBanner(
+      'হিরো বাইক নিয়ে উড়ছেন ভালো...',
+      'তেল ফুরালে ফ্লাইওভারে ঠেলতে খবর আছে! ⛽',
+      'LOW FUEL ALERT ON FLYOVER = EXTRA LEG DAY',
+      '#9a3412',
+      '#27272a',
+      '#fb923c',
+      '#fed7aa'
+    ),
+    makeFunnyFlyoverBanner(
+      'বামে তাকাবেন না, নিচে আরেক ফ্লাইওভার!',
+      'দুই তলা কুড়িল হাইওয়েতে স্বাগতম 🏍💨',
+      'DOUBLE-DECKER INTERCHANGE • STAY IN YOUR LEFT LANE',
+      '#1e3a8a',
+      '#09090b',
+      '#facc15',
+      '#93c5fd'
+    ),
+  ];
+
   return {
     road: roadTex,
     cityRoad: cityRoadTex,
@@ -1097,6 +1749,37 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     jokeSigns,
     trafficControlSigns,
     accidentSloganSign,
+    tejgaonTurnBillboard,
+    kurilSplitGantry,
+    expresswayRoad,
+    canalWater,
+    neelaMarketSign,
+    restRoomSign,
+    restRoomPad,
+    uturnLoopRoad,
+    turnPavementArrow,
+    bridgeCrossRoad,
+    flyoverSlipArrow,
+    routeBadgeUttara,
+    routeBadge300ft,
+    expresswayBillboards,
+    duckStallSign,
+    baluBridgeSign,
+    restaurantSigns,
+    flyoverFunnyBanners,
+    uturnSigns: {
+      metroEnd: makeUTurnTex('↺ ইউ-টার্ন • তেজগাঁও মোড়', 'ঘুরে তেজগাঁও লিংক রোডে ঢুকুন', '#1e3a8a'),
+      tejgaonSouth: makeUTurnTex('↺ ইউ-টার্ন • মহাখালী-উত্তরা', 'উত্তরের দিকে মহাখালী ও ৩০০ ফিট যান', '#065f46'),
+      uttara: makeUTurnTex('↺ উত্তরা ইউ-টার্ন • মহাখালী ফিরুন', 'পাশেই উত্তরা হিরো শোরুম • ঘুরে ফিরুন', '#991b1b'),
+      purbachal: makeUTurnTex('↺ পূর্বাচল শেষ প্রান্ত • ইউ-টার্ন', 'ঘুরে নীলা মার্কেট হয়ে কুড়িল-মহাখালী ফিরুন', '#065f46'),
+    },
+    corridorGantries: {
+      tejgaon: makeGantryTex('⬆ মহাখালী  •  বনানী  •  উত্তরা', 'তেজগাঁও শিল্পাঞ্চল • হিরো শোরুম জোন', 'TEJGAON HERO CORRIDOR', '#065f46'),
+      mohakhali: makeGantryTex('⬆ মহাখালী ফ্লাইওভার সামনে', 'সার্ভিস লেন বামে  |  ফ্লাইওভার মাঝখানে', 'MOHAKHALI FLYOVER • KEEP SPEED', '#1e3a8a'),
+      banani: makeGantryTex('⬆ বনানী  •  দ্বিতীয় ফ্লাইওভার', 'সামনে কুড়িল ৩০০ ফিট ও উত্তরা সংযোগ', 'BANANI OVERPASS • AIRPORT ROAD', '#065f46'),
+      expressway300ft: makeGantryTex('পূর্বাচল ৩০০ ফিট এক্সপ্রেসওয়ে', 'সামনে নীলা মার্কেট  •  বাইকারস রেস্ট রুম', '6-LANE CANAL EXPRESSWAY • PURBACHAL', '#065f46'),
+      uttara: makeGantryTex('উত্তরা • বিমানবন্দর সড়ক', 'সামনে উত্তরা হিরো শোরুম ও ইউ-টার্ন', 'UTTARA NORTH • HERO SHOWROOM', '#1e3a8a'),
+    },
     contactShadow,
     dispose: () => {
       allTextures.forEach((t) => t.dispose());

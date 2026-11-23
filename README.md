@@ -1,4 +1,4 @@
-# Hero Rastar Raja (হিরো রাস্তার রাজা)
+# DTA - Dhata Te Achi (ডিটিএ - ঢাকাতে আছি)
 
 A stylized, mobile-first 3D Dhaka-inspired motorcycle arcade game branded for **Nitol-Niloy Group (নিটল-নিলয় গ্রুপ)**, built with **Three.js**, **React**, **TypeScript**, and **Web Audio API**.
 

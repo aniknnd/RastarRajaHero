@@ -1,12 +1,13 @@
 /**
  * Motion (gyroscope / device-tilt) steering controller.
  *
- * Reads the W3C `deviceorientation` event, calibrates a neutral "hold" angle
- * and exposes a smoothed steering value in [-1, 1] where -1 = full right and
- * +1 = full left (matching the engine's yaw convention).
+ * Projects the W3C `deviceorientation` (beta, gamma) Euler angles into the
+ * 3D Earth-UP gravity vector inside the screen's current coordinate frame
+ * (portrait / landscape / upside-down). That avoids Euler gimbal lock at
+ * upright holding angles (beta ~ 90°) and ±180° flips in landscape mode.
  *
- * Handles iOS 13+ permission requests (must be triggered from a user gesture)
- * and re-maps the tilt axis for portrait / landscape screen orientations.
+ * Exposes smoothed steering in [-1, 1] (+1 = full left, -1 = full right,
+ * matching the engine's yaw convention).
  */
 
 import type { MotionStatus } from './types';
@@ -19,6 +20,12 @@ type PermissionCtor = typeof DeviceOrientationEvent & {
 
 const clamp = (v: number, min: number, max: number): number => Math.min(max, Math.max(min, v));
 
+const wrapDeg = (deg: number): number => {
+  let d = ((deg + 180) % 360 + 360) % 360 - 180;
+  if (d === -180) d = 180;
+  return d;
+};
+
 export class MotionController {
   private enabled = false;
   private enabling = false;
@@ -26,8 +33,13 @@ export class MotionController {
   private calibrated = false;
   private receivedOrientation = false;
 
-  /** Tilt (degrees) captured when motion control was enabled / last recentered. */
-  private baseTilt = 0;
+  /** Warmup samples skipped/averaged so a crooked tap frame never locks bias. */
+  private warmupSamples: number[] = [];
+  /** Neutral tilt offset in degrees (clamped near horizon level). */
+  private baseTiltDeg = 0;
+  /** Latest unsmoothed tilt angle (used for spike rejection). */
+  private lastTiltDeg: number | null = null;
+
   /** Unsmoothed steering target from the latest sensor sample. */
   private rawSteer = 0;
   /** Low-pass filtered steering actually reported to the engine. */
@@ -36,10 +48,12 @@ export class MotionController {
   private screenAngle = 0;
   private status: MotionStatus = 'off';
 
-  /** Full-lock tilt in degrees; beyond this the steering saturates. */
+  /** Full-lock tilt in degrees; beyond this steering saturates. */
   private readonly maxTiltDeg = 32;
-  /** Ignore tiny tilts so the bike tracks straight while held steady. */
-  private readonly deadzone = 0.06;
+  /** Steady-hand deadzone in degrees so holding level tracks dead straight. */
+  private readonly deadzoneDeg = 4.0;
+  /** Max allowed neutral offset from true horizon so crooked taps never drift forever. */
+  private readonly maxNeutralBiasDeg = 8.0;
 
   public get isEnabled(): boolean {
     return this.enabled;
@@ -68,9 +82,6 @@ export class MotionController {
       this.status = 'unsupported';
       return false;
     }
-    // DeviceOrientation is a secure-context feature: Chrome/Android and iOS
-    // Safari silently withhold sensor events over plain HTTP, which looks like
-    // "motion does nothing". Detect it up front and explain instead.
     if (window.isSecureContext === false) {
       this.status = 'insecure';
       return false;
@@ -98,13 +109,12 @@ export class MotionController {
 
       this.enabled = true;
       this.receivedOrientation = false;
-      this.calibrated = false;
-      this.rawSteer = 0;
-      this.smoothedSteer = 0;
+      this.resetCalibrationState();
       this.screenAngle = this.readScreenAngle();
 
       window.addEventListener('deviceorientation', this.handleOrientation, true);
       window.addEventListener('orientationchange', this.handleOrientationChange);
+      window.addEventListener('resize', this.handleOrientationChange);
       window.screen?.orientation?.addEventListener?.('change', this.handleOrientationChange);
       this.listening = true;
       this.status = 'waiting';
@@ -120,83 +130,150 @@ export class MotionController {
     if (this.listening) {
       window.removeEventListener('deviceorientation', this.handleOrientation, true);
       window.removeEventListener('orientationchange', this.handleOrientationChange);
+      window.removeEventListener('resize', this.handleOrientationChange);
       window.screen?.orientation?.removeEventListener?.('change', this.handleOrientationChange);
       this.listening = false;
     }
-    this.rawSteer = 0;
-    this.smoothedSteer = 0;
-    this.calibrated = false;
+    this.resetCalibrationState();
     this.status = 'off';
   }
 
-  /** Drops the captured neutral so the next sample becomes the new "straight ahead". */
+  /** Drops the captured neutral so the next steady samples establish straight ahead. */
   public recalibrate(): void {
     if (!this.enabled) return;
-    this.calibrated = false;
-    this.rawSteer = 0;
-    this.smoothedSteer = 0;
+    this.resetCalibrationState();
   }
 
   /** Smoothed steering in [-1, 1] (+1 left, -1 right). Call once per frame. */
   public getSteer(dt: number): number {
     if (!this.enabled || this.status !== 'active') return 0;
-    const k = 1 - Math.exp(-12 * Math.min(Math.max(dt, 0.001), 0.05));
+    const k = 1 - Math.exp(-14 * Math.min(Math.max(dt, 0.001), 0.05));
     this.smoothedSteer += (this.rawSteer - this.smoothedSteer) * k;
-    if (Math.abs(this.smoothedSteer) < 0.001) this.smoothedSteer = 0;
+    if (Math.abs(this.smoothedSteer) < 0.002 && Math.abs(this.rawSteer) < 0.002) {
+      this.smoothedSteer = 0;
+    }
     return this.smoothedSteer;
   }
 
+  private resetCalibrationState(): void {
+    this.calibrated = false;
+    this.warmupSamples = [];
+    this.baseTiltDeg = 0;
+    this.lastTiltDeg = null;
+    this.rawSteer = 0;
+    this.smoothedSteer = 0;
+  }
+
   private handleOrientation = (event: DeviceOrientationEvent): void => {
+    if (!this.enabled) return;
     if (event.beta === null || event.gamma === null) return;
+    if (!Number.isFinite(event.beta) || !Number.isFinite(event.gamma)) return;
+
+    // Keep screen orientation synced even inside iframes where orientationchange may be skipped
+    const liveAngle = this.readScreenAngle();
+    if (liveAngle !== this.screenAngle) {
+      this.screenAngle = liveAngle;
+      this.resetCalibrationState();
+    }
 
     if (!this.receivedOrientation) {
       this.receivedOrientation = true;
       this.status = 'active';
     }
 
-    const tilt = this.readTilt(event.beta, event.gamma);
+    let tiltDeg = this.evalRollRightDeg(event.beta, event.gamma, this.screenAngle);
+
+    // Reject impossible single-frame sensor spikes (>40° jump between adjacent events)
+    if (this.lastTiltDeg !== null) {
+      const jump = wrapDeg(tiltDeg - this.lastTiltDeg);
+      if (Math.abs(jump) > 40) {
+        tiltDeg = wrapDeg(this.lastTiltDeg + Math.sign(jump) * 40);
+      }
+    }
+    this.lastTiltDeg = tiltDeg;
+
     if (!this.calibrated) {
-      this.baseTilt = tilt;
+      this.warmupSamples.push(tiltDeg);
+      if (this.warmupSamples.length < 4) {
+        this.rawSteer = 0;
+        return;
+      }
+      // Drop the very first packet (often stale/cached on tap), average the next 3
+      const settled = this.warmupSamples.slice(1);
+      const avg = settled.reduce((sum, v) => sum + v, 0) / settled.length;
+      // If user tapped while phone was heavily tilted (>15°), fall back to true level horizon (0°)
+      this.baseTiltDeg = Math.abs(avg) <= 15 ? clamp(avg, -this.maxNeutralBiasDeg, this.maxNeutralBiasDeg) : 0;
       this.calibrated = true;
     }
 
-    const delta = tilt - this.baseTilt;
-    // readTilt() grows when the device is rolled to the right, but the engine's
-    // positive steer is a LEFT turn, so invert here.
-    const steer = clamp(delta / this.maxTiltDeg, -1, 1);
-    this.rawSteer = -this.applyDeadzone(steer);
+    const deltaDeg = wrapDeg(tiltDeg - this.baseTiltDeg);
+    const absDeg = Math.abs(deltaDeg);
+    if (absDeg <= this.deadzoneDeg) {
+      this.rawSteer = 0;
+      return;
+    }
+
+    const norm = clamp((absDeg - this.deadzoneDeg) / (this.maxTiltDeg - this.deadzoneDeg), 0, 1);
+    const curved = Math.pow(norm, 1.25);
+    // Positive tiltDeg = rolled RIGHT; engine positive steer = LEFT turn, so negate.
+    this.rawSteer = -Math.sign(deltaDeg) * curved;
   };
 
   private handleOrientationChange = (): void => {
-    this.screenAngle = this.readScreenAngle();
-    this.calibrated = false;
+    const nextAngle = this.readScreenAngle();
+    if (nextAngle !== this.screenAngle) {
+      this.screenAngle = nextAngle;
+      this.resetCalibrationState();
+    }
   };
 
-  private applyDeadzone(value: number): number {
-    const magnitude = Math.abs(value);
-    if (magnitude < this.deadzone) return 0;
-    return Math.sign(value) * ((magnitude - this.deadzone) / (1 - this.deadzone));
-  }
-
   private readScreenAngle(): number {
-    const angle =
-      (typeof window !== 'undefined' && window.screen?.orientation?.angle) ||
-      (typeof window !== 'undefined' ? (window as unknown as { orientation?: number }).orientation : 0) ||
+    if (typeof window === 'undefined') return 0;
+    const raw =
+      window.screen?.orientation?.angle ??
+      (window as unknown as { orientation?: number }).orientation ??
       0;
-    return ((angle % 360) + 360) % 360;
+    const normalized = ((raw % 360) + 360) % 360;
+    // Snap to nearest 90° cardinal orientation (0, 90, 180, 270)
+    return (Math.round(normalized / 90) * 90) % 360;
   }
 
-  /** Returns the current roll angle in degrees, growing as the device rolls right. */
-  private readTilt(beta: number, gamma: number): number {
-    switch (this.screenAngle) {
+  /**
+   * Computes roll angle in degrees [-90, +90] where positive = tilted RIGHT
+   * in the current screen orientation, using the 3D Earth-UP vector projection.
+   * Continuous through upright holding angles (beta ~ 90°) and landscape flips.
+   */
+  private evalRollRightDeg(beta: number, gamma: number, screenAngle: number): number {
+    const b = (beta * Math.PI) / 180;
+    const g = (gamma * Math.PI) / 180;
+
+    // Earth-UP unit vector in device coordinates (+X right, +Y top, +Z out of screen)
+    const ux = -Math.cos(b) * Math.sin(g);
+    const uy = Math.sin(b);
+    const uz = Math.cos(b) * Math.cos(g);
+
+    let uRight: number;
+    let uUp: number;
+    switch (screenAngle) {
       case 90:
-        return beta;
+        uRight = -uy;
+        uUp = ux;
+        break;
       case 270:
-        return -beta;
+        uRight = uy;
+        uUp = -ux;
+        break;
       case 180:
-        return -gamma;
+        uRight = -ux;
+        uUp = -uy;
+        break;
       default:
-        return gamma;
+        uRight = ux;
+        uUp = uy;
+        break;
     }
+
+    const horizon = Math.hypot(uUp, uz);
+    return (Math.atan2(-uRight, horizon) * 180) / Math.PI;
   }
 }

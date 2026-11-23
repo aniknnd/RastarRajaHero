@@ -1,5 +1,5 @@
 /**
- * Hybrid Audio Manager for Hero Rastar Raja:
+ * Hybrid Audio Manager for DTA - Dhata Te Achi:
  * - Plays the 9 uploaded Bangla/arcade MP3s from /assets/aistudio/*
  * - Layers procedural Web Audio engine synth, horns, near-miss chimes,
  *   wall thuds, refueling ticks, and crisp impact crunch underneath.

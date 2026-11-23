@@ -7,7 +7,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameHUD } from './components/GameHUD';
 import { TouchControls } from './components/TouchControls';
 import { HeroRastarEngine } from './game/engine';
-import { GameState, type BikeTierId, type HudSnapshot, type InputState } from './game/types';
+import {
+  GameState,
+  type BikeTierId,
+  type EnvironmentPresetId,
+  type HudSnapshot,
+  type InputState,
+} from './game/types';
 
 const INITIAL_HUD: HudSnapshot = {
   gameState: GameState.MENU,
@@ -27,6 +33,7 @@ const INITIAL_HUD: HudSnapshot = {
   nearestPumpMeters: 342,
   isInShowroomZone: false,
   nearestShowroomMeters: 30,
+  isInRestRoomZone: false,
   nextUnlockBikeId: 'xtreme_160r',
   combo: 1,
   comboTimerNorm: 0,
@@ -54,11 +61,13 @@ const INITIAL_HUD: HudSnapshot = {
   gameOverRoastsBn: [],
   lapCount: 1,
   zoneLabelBn: 'ফার্মগেট • ফার্মগেট মেট্রো',
+  routeHintBn: 'আগারগাঁও মেট্রো হয়ে তেজগাঁও টার্ন ➡',
   upcomingLight: null,
   upcomingLightMeters: 0,
   sfxMuted: false,
   musicMuted: false,
   motionStatus: 'off',
+  environmentPreset: 'sunset',
 };
 
 export default function App() {
@@ -128,6 +137,7 @@ export default function App() {
 
     if (engine.getMotionStatus() !== 'off') {
       engine.disableMotionControl();
+      engine.releaseAllTouchControls();
       setMotionActive(false);
       return;
     }
@@ -145,17 +155,27 @@ export default function App() {
       return;
     }
 
+    engine.releaseAllTouchControls();
     setMotionActive(true);
-    engine.showNotice('মোশন কন্ট্রোল চালু', 'ফোন ডানে-বামে কাতিয়ে স্টিয়ার করুন', 'bonus');
+    engine.showNotice('মোশন কন্ট্রোল চালু', 'ফোন কাতিয়ে স্টিয়ার করুন · থামতে শুধু ব্রেক চাপুন', 'bonus');
 
     // No sensor samples on this device (e.g. desktop) — roll back gracefully.
     window.setTimeout(() => {
       if (engineRef.current === engine && engine.getMotionStatus() === 'waiting') {
         engine.disableMotionControl();
+        engine.releaseAllTouchControls();
         setMotionActive(false);
         engine.showNotice('মোশন সেন্সর পাওয়া যায়নি', 'ফোনে HTTPS দিয়ে খুলুন অথবা টাচ কন্ট্রোল ব্যবহার করুন', 'warning');
       }
     }, 2200);
+  }, []);
+
+  const handleCycleEnvironment = useCallback(() => {
+    engineRef.current?.cycleEnvironmentPreset();
+  }, []);
+
+  const handleSelectEnvironment = useCallback((preset: EnvironmentPresetId) => {
+    engineRef.current?.setEnvironmentPreset(preset);
   }, []);
 
   const handlePause = useCallback(() => {
@@ -178,6 +198,8 @@ export default function App() {
     return engineRef.current?.purchaseOrEquipBike(bikeId);
   }, []);
 
+  const isMotionMode = motionActive || hud.motionStatus === 'active' || hud.motionStatus === 'waiting';
+
   return (
     <main className="relative w-screen h-screen overflow-hidden bg-amber-950 select-none">
       {/* Isolated WebGL viewport container */}
@@ -190,7 +212,7 @@ export default function App() {
         sfxMuted={sfxMuted}
         musicMuted={musicMuted}
         showTouchControls={showTouchControls}
-        motionActive={motionActive}
+        motionActive={isMotionMode}
         motionStatus={hud.motionStatus}
         onStart={handleStart}
         onToggleMute={handleToggleMute}
@@ -198,6 +220,8 @@ export default function App() {
         onToggleMusicMute={handleToggleMusicMute}
         onToggleTouchControls={handleToggleTouchControls}
         onToggleMotion={handleToggleMotion}
+        onCycleEnvironment={handleCycleEnvironment}
+        onSelectEnvironment={handleSelectEnvironment}
         onOpenShowroom={handleOpenShowroom}
         onCloseShowroom={handleCloseShowroom}
         onSelectBike={handleSelectBike}
@@ -205,9 +229,10 @@ export default function App() {
         onResumeGame={handleResume}
       />
 
-      {/* Lower-center multi-touch driving cluster (BRAKE centered) */}
+      {/* Lower-center multi-touch driving cluster — switches to single BRAKE button in Motion mode */}
       <TouchControls
-        visible={hud.gameState === GameState.PLAYING && showTouchControls}
+        visible={hud.gameState === GameState.PLAYING && (showTouchControls || isMotionMode)}
+        motionOnlyBrake={isMotionMode}
         onControlChange={handleTouchControl}
       />
     </main>

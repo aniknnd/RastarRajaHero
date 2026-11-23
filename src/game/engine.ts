@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GameAudio } from './audio';
+import { clampToDrivableCorridors, sampleDhakaSurface, type CorridorId } from './corridors';
 import { MotionController, type MotionStatus } from './motion';
 import {
   buildCollectiblePickup,
@@ -18,6 +19,8 @@ import { createProceduralTextures, type ProceduralTextureSet } from './textures'
 import {
   BIKE_ORDER,
   BIKE_SPECS,
+  CORRIDOR_CONFIG,
+  ENVIRONMENT_PRESETS,
   FUNNY_BENGALI_MESSAGES,
   FUNNY_DEATH_LINES_BN,
   GAME_CONFIG,
@@ -26,6 +29,7 @@ import {
   VEHICLE_SPECS,
   type BikeSpec,
   type BikeTierId,
+  type EnvironmentPresetId,
   type EventPopup,
   type HudMission,
   type HudSnapshot,
@@ -38,15 +42,33 @@ import {
   type CityLane,
   type DhakaWorld,
   type FuelStationNode,
+  type RestRoomNode,
   type ShowroomNode,
 } from './world';
+
+type TrafficRouteTag = 'METRO_LOCAL' | 'SPINE_TO_UTTARA' | 'KURIL_RAMP_TO_300FT' | 'EXPRESSWAY_300FT';
+
+type KurilRampPhase =
+  | 'none'
+  | 'eb_merge'
+  | 'eb_ramp_up'
+  | 'eb_arc'
+  | 'eb_ramp_down'
+  | 'wb_ramp_up'
+  | 'wb_arc'
+  | 'wb_ramp_down'
+  | 'wb_merge';
 
 interface TrafficEntity {
   id: number;
   isCityVehicle: boolean;
+  routeTag: TrafficRouteTag;
+  kurilPhase: KurilRampPhase;
+  arcAngle: number;
   kind: VehicleKind;
   rig: TrafficModelRig;
   x: number;
+  y: number;
   z: number;
   yaw: number;
   dirX: number;
@@ -61,6 +83,7 @@ interface TrafficEntity {
   nearMissedThisPass: boolean;
   hitCooldown: number;
   lookaheadTimer: number;
+  turnCooldown: number;
 }
 
 type PedMode = 'sidewalk' | 'crossing' | 'fleeing' | 'chasing' | 'knocked';
@@ -112,6 +135,7 @@ interface PickupEntity {
   kind: PickupKind;
   mesh: THREE.Group;
   x: number;
+  y: number;
   z: number;
   respawnTimer: number;
   phase: number;
@@ -143,14 +167,6 @@ const _fuelPortWorldPos = new THREE.Vector3();
 const _hoseStart = new THREE.Vector3();
 const _hoseMid = new THREE.Vector3();
 const _upVec = new THREE.Vector3(0, 1, 0);
-
-function wrapLoopDelta(targetZ: number, refZ: number): number {
-  let d = targetZ - refZ;
-  const half = GAME_CONFIG.LOOP_LENGTH / 2;
-  while (d > half) d -= GAME_CONFIG.LOOP_LENGTH;
-  while (d < -half) d += GAME_CONFIG.LOOP_LENGTH;
-  return d;
-}
 
 function detectSoftwareWebGL(): boolean {
   try {
@@ -203,12 +219,144 @@ function pickArteryLaneForKind(kind: VehicleKind): number {
   return Math.floor(Math.random() * 4);
 }
 
+interface EnvironmentThemeConfig {
+  skyTop: string;
+  skyMid: string;
+  skyHorizon: string;
+  sunDisc: string;
+  sunHalo: string;
+  cloudTint: string;
+  starAlpha: number;
+  fogHex: number;
+  fogDensity: number;
+  hemiSkyHex: number;
+  hemiGroundHex: number;
+  hemiIntensity: number;
+  sunHex: number;
+  sunIntensity: number;
+  sunOffset: [number, number, number];
+  rimHex: number;
+  rimIntensity: number;
+  groundHex: number;
+  exposure: number;
+  envIntensity: number;
+  headlightIntensity: number;
+}
+
+const ENV_THEMES: Record<EnvironmentPresetId, EnvironmentThemeConfig> = {
+  morning: {
+    skyTop: '#0284c7',
+    skyMid: '#7dd3fc',
+    skyHorizon: '#fde7c5',
+    sunDisc: '#fffbeb',
+    sunHalo: 'rgba(254, 240, 138, 0.55)',
+    cloudTint: 'rgba(255, 250, 240, 0.72)',
+    starAlpha: 0,
+    fogHex: 0xdbeafe,
+    fogDensity: 0.00105,
+    hemiSkyHex: 0xcbeafe,
+    hemiGroundHex: 0x4d7c0f,
+    hemiIntensity: 1.08,
+    sunHex: 0xffe8ba,
+    sunIntensity: 2.3,
+    sunOffset: [38, 28, -24],
+    rimHex: 0xbae6fd,
+    rimIntensity: 0.55,
+    groundHex: 0x4d7c0f,
+    exposure: 1.08,
+    envIntensity: 0.95,
+    headlightIntensity: 0,
+  },
+  afternoon: {
+    skyTop: '#0369a1',
+    skyMid: '#38bdf8',
+    skyHorizon: '#e0f2fe',
+    sunDisc: '#ffffff',
+    sunHalo: 'rgba(254, 249, 195, 0.45)',
+    cloudTint: 'rgba(255, 255, 255, 0.82)',
+    starAlpha: 0,
+    fogHex: 0xc8e8fb,
+    fogDensity: 0.00102,
+    hemiSkyHex: 0xdbeafe,
+    hemiGroundHex: 0x65a30d,
+    hemiIntensity: 1.15,
+    sunHex: 0xfff6dc,
+    sunIntensity: 2.55,
+    sunOffset: [26, 52, 18],
+    rimHex: 0xfef08a,
+    rimIntensity: 0.52,
+    groundHex: 0x4d7c0f,
+    exposure: 1.12,
+    envIntensity: 1.05,
+    headlightIntensity: 0,
+  },
+  sunset: {
+    skyTop: '#2e1065',
+    skyMid: '#be185d',
+    skyHorizon: '#fb923c',
+    sunDisc: '#fef08a',
+    sunHalo: 'rgba(249, 115, 22, 0.65)',
+    cloudTint: 'rgba(251, 146, 60, 0.48)',
+    starAlpha: 0.25,
+    fogHex: 0xf97316,
+    fogDensity: 0.00112,
+    hemiSkyHex: 0xf472b6,
+    hemiGroundHex: 0x451a03,
+    hemiIntensity: 1.12,
+    sunHex: 0xff8a3d,
+    sunIntensity: 2.75,
+    sunOffset: [42, 17, -34],
+    rimHex: 0xe879f9,
+    rimIntensity: 0.95,
+    groundHex: 0x3f6212,
+    exposure: 1.18,
+    envIntensity: 1.18,
+    headlightIntensity: 1.9,
+  },
+  night: {
+    skyTop: '#020617',
+    skyMid: '#1e1b4b',
+    skyHorizon: '#312e81',
+    sunDisc: '#e2e8f0',
+    sunHalo: 'rgba(147, 197, 253, 0.35)',
+    cloudTint: 'rgba(99, 102, 241, 0.24)',
+    starAlpha: 0.9,
+    fogHex: 0x0f172a,
+    fogDensity: 0.00128,
+    hemiSkyHex: 0x4338ca,
+    hemiGroundHex: 0x0f172a,
+    hemiIntensity: 0.82,
+    sunHex: 0x93c5fd,
+    sunIntensity: 0.98,
+    sunOffset: [22, 42, -22],
+    rimHex: 0xf472b6,
+    rimIntensity: 0.88,
+    groundHex: 0x1e293b,
+    exposure: 1.24,
+    envIntensity: 1.12,
+    headlightIntensity: 4.8,
+  },
+};
+
+const ENV_STORAGE_KEY = 'hero_rastar_raja_env_v1';
+
 export class HeroRastarEngine {
   private container: HTMLElement;
   private renderer: THREE.WebGLRenderer;
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
+  private hemiLight: THREE.HemisphereLight;
   private sunLight: THREE.DirectionalLight;
+  private rimLight: THREE.DirectionalLight;
+  private skyDome: THREE.Mesh;
+  private skyCanvas: HTMLCanvasElement;
+  private skyCtx: CanvasRenderingContext2D;
+  private skyTex: THREE.CanvasTexture;
+  private bikeHeadlightGroup: THREE.Group;
+  private bikeHeadlightSpot: THREE.SpotLight;
+  private bikeHeadlightCone: THREE.Mesh;
+  private environmentPreset: EnvironmentPresetId = 'sunset';
+  private sunOffset = new THREE.Vector3(42, 17, -34);
   private isSoftwareGl: boolean;
   private textures: ProceduralTextureSet;
   private world: DhakaWorld;
@@ -242,20 +390,23 @@ export class HeroRastarEngine {
   private periodSteer = false;
   private motion = new MotionController();
 
-  // Player Physics State (Yaw-only upright motorcycle)
+  // Player Physics State (Yaw-only upright motorcycle with elevation tracking for flyovers)
   private gameState: GameState = GameState.MENU;
   private playerX = -3.25;
+  private playerY = 0;
   private playerZ = -18;
   private playerYaw = 0; // 0 = -Z (North)
-  private forwardSpeed = 0; // m/s along bike forward vector
+  private forwardSpeed = 6; // m/s along bike forward vector
   private lateralSlip = 0;
   private smoothedSteer = 0;
   private bikeLean = 0;
   private bikePitch = 0;
+  private bikeSlopePitch = 0;
   private bikeRollCrash = 0;
   private postHitRecoveryTimer = 0;
   private wasBoosting = false;
   private freeNitroTimer = 0;
+  private currentCorridor: CorridorId = 'metro';
 
   // Fuel & Hose
   private fuelAmount = 100;
@@ -264,7 +415,7 @@ export class HeroRastarEngine {
   private refuelSafeGraceTimer = 0;
   private refuelShieldUsedThisStop = false;
 
-  // Showroom & Bike Progression
+  // Showroom, Bikers Rest Room & Bike Progression
   private heroBankScore = 0;
   private unlockedBikes: BikeTierId[] = ['glamour_125'];
   private equippedBikeId: BikeTierId = 'glamour_125';
@@ -272,6 +423,9 @@ export class HeroRastarEngine {
   private showroomExitCooldown = 0;
   private showroomVisitedLock = false;
   private showroomSaluteLock = false;
+  private restRoomVisitedLock = false;
+  private purbachalTurnBonusGiven = false;
+  private uttaraTurnBonusGiven = false;
   private milestone100kShown = false;
   private milestone200kShown = false;
   private bankSaveAccum = 0;
@@ -357,26 +511,45 @@ export class HeroRastarEngine {
     this.renderer.domElement.style.touchAction = 'none';
     container.appendChild(this.renderer.domElement);
 
+    this.environmentPreset = this.loadEnvironmentPreset();
     this.scene = new THREE.Scene();
-    const skyColor = new THREE.Color(0x7dd3fc);
+    const skyColor = new THREE.Color(0xf97316);
     this.scene.background = skyColor;
-    // Lighter haze: keeps the road crisp well ahead of the bike while still
-    // hiding the world-loop seam in the far distance.
-    this.scene.fog = new THREE.FogExp2(0xbae6fd, 0.0022);
+    // Lighter haze + long view range: keeps upcoming roads, flyovers & U-turns crisp well ahead.
+    this.scene.fog = new THREE.FogExp2(0xf97316, 0.00112);
 
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     pmrem.dispose();
 
     const aspect = (container.clientWidth || window.innerWidth) / Math.max(container.clientHeight || window.innerHeight, 1);
-    this.camera = new THREE.PerspectiveCamera(60, aspect, 0.2, 320);
+    this.camera = new THREE.PerspectiveCamera(60, aspect, 0.2, 540);
 
-    // Bright tropical Dhaka daylight rig (1 shadow caster)
-    const hemi = new THREE.HemisphereLight(0xbfe8ff, 0x4d7c0f, 1.05);
+    // Dynamic GTA-6 Gradient SkyDome
+    this.skyCanvas = document.createElement('canvas');
+    this.skyCanvas.width = 512;
+    this.skyCanvas.height = 512;
+    this.skyCtx = this.skyCanvas.getContext('2d')!;
+    this.skyTex = new THREE.CanvasTexture(this.skyCanvas);
+    this.skyTex.colorSpace = THREE.SRGBColorSpace;
+    this.skyDome = new THREE.Mesh(
+      new THREE.SphereGeometry(480, 28, 18),
+      new THREE.MeshBasicMaterial({
+        map: this.skyTex,
+        side: THREE.BackSide,
+        fog: false,
+        depthWrite: false,
+      })
+    );
+    this.scene.add(this.skyDome);
+
+    // 3-point tropical Dhaka atmosphere rig (1 shadow caster)
+    const hemi = new THREE.HemisphereLight(0xf472b6, 0x451a03, 1.12);
     this.scene.add(hemi);
+    this.hemiLight = hemi;
 
-    const sun = new THREE.DirectionalLight(0xfff4d6, 2.25);
-    sun.position.set(28, 46, 22);
+    const sun = new THREE.DirectionalLight(0xff8a3d, 2.75);
+    sun.position.set(42, 17, -34);
     sun.castShadow = !this.isSoftwareGl;
     sun.shadow.mapSize.width = 1024;
     sun.shadow.mapSize.height = 1024;
@@ -392,9 +565,10 @@ export class HeroRastarEngine {
     this.scene.add(sun.target);
     this.sunLight = sun;
 
-    const rim = new THREE.DirectionalLight(0xfde68a, 0.55);
+    const rim = new THREE.DirectionalLight(0xe879f9, 0.95);
     rim.position.set(-20, 18, -30);
     this.scene.add(rim);
+    this.rimLight = rim;
 
     this.textures = createProceduralTextures(this.renderer);
     this.world = buildDhakaWorld(this.textures);
@@ -403,6 +577,31 @@ export class HeroRastarEngine {
     this.heroRig = buildHeroMotorcycle(this.textures, this.equippedBikeId);
     this.heroRig.group.position.set(this.playerX, 0, this.playerZ);
     this.scene.add(this.heroRig.group);
+
+    // Active Hero Bike Headlight (illuminates Dhaka roads & 300ft in Sunset & Night)
+    this.bikeHeadlightGroup = new THREE.Group();
+    this.bikeHeadlightSpot = new THREE.SpotLight(0xfef9c3, 2.0, 58, Math.PI / 5, 0.55, 1.4);
+    this.bikeHeadlightSpot.position.set(0, 0.72, -0.58);
+    this.bikeHeadlightSpot.target.position.set(0, 0.05, -18);
+    const coneGeo = new THREE.ConeGeometry(2.6, 13, 14, 1, true);
+    coneGeo.translate(0, -6.5, 0);
+    coneGeo.rotateX(Math.PI / 2);
+    this.bikeHeadlightCone = new THREE.Mesh(
+      coneGeo,
+      new THREE.MeshBasicMaterial({
+        color: 0xfef08a,
+        transparent: true,
+        opacity: 0.14,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+      })
+    );
+    this.bikeHeadlightCone.position.set(0, 0.72, -0.62);
+    this.bikeHeadlightGroup.add(this.bikeHeadlightSpot, this.bikeHeadlightSpot.target, this.bikeHeadlightCone);
+    this.heroRig.group.add(this.bikeHeadlightGroup);
+
+    this.applyEnvironmentTheme(this.environmentPreset);
 
     this.slapperRig = buildSlapper();
     this.slapperRig.group.visible = false;
@@ -532,6 +731,9 @@ export class HeroRastarEngine {
   }
 
   private equipBikeModel(bikeId: BikeTierId): void {
+    if (this.bikeHeadlightGroup.parent === this.heroRig.group) {
+      this.heroRig.group.remove(this.bikeHeadlightGroup);
+    }
     if (this.heroRig.group.parent) {
       this.scene.remove(this.heroRig.group);
     }
@@ -548,7 +750,136 @@ export class HeroRastarEngine {
     this.heroRig = buildHeroMotorcycle(this.textures, bikeId);
     this.heroRig.group.position.set(this.playerX, 0, this.playerZ);
     this.heroRig.group.rotation.set(0, this.playerYaw, 0);
+    this.heroRig.group.add(this.bikeHeadlightGroup);
     this.scene.add(this.heroRig.group);
+  }
+
+  private loadEnvironmentPreset(): EnvironmentPresetId {
+    try {
+      const saved = localStorage.getItem(ENV_STORAGE_KEY);
+      if (saved === 'morning' || saved === 'afternoon' || saved === 'sunset' || saved === 'night') {
+        return saved;
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return 'sunset';
+  }
+
+  public getEnvironmentPreset(): EnvironmentPresetId {
+    return this.environmentPreset;
+  }
+
+  public setEnvironmentPreset(preset: EnvironmentPresetId): void {
+    this.environmentPreset = preset;
+    try {
+      localStorage.setItem(ENV_STORAGE_KEY, preset);
+    } catch {
+      // Ignore
+    }
+    this.applyEnvironmentTheme(preset);
+    const meta = ENVIRONMENT_PRESETS.find((p) => p.id === preset);
+    if (meta) {
+      this.pushPopup(`পরিবেশ: ${meta.labelBn}`, meta.labelEn, 'bonus');
+    }
+    this.emitHud();
+  }
+
+  public cycleEnvironmentPreset(): EnvironmentPresetId {
+    const idx = ENVIRONMENT_PRESETS.findIndex((p) => p.id === this.environmentPreset);
+    const next = ENVIRONMENT_PRESETS[(idx + 1) % ENVIRONMENT_PRESETS.length].id;
+    this.setEnvironmentPreset(next);
+    return next;
+  }
+
+  private applyEnvironmentTheme(preset: EnvironmentPresetId): void {
+    const cfg = ENV_THEMES[preset];
+    this.renderer.toneMappingExposure = cfg.exposure;
+    this.scene.environmentIntensity = cfg.envIntensity;
+    if (this.scene.background instanceof THREE.Color) {
+      this.scene.background.setHex(cfg.fogHex);
+    }
+    if (this.scene.fog instanceof THREE.FogExp2) {
+      this.scene.fog.color.setHex(cfg.fogHex);
+      this.scene.fog.density = cfg.fogDensity;
+    }
+
+    this.hemiLight.color.setHex(cfg.hemiSkyHex);
+    this.hemiLight.groundColor.setHex(cfg.hemiGroundHex);
+    this.hemiLight.intensity = cfg.hemiIntensity;
+
+    this.sunLight.color.setHex(cfg.sunHex);
+    this.sunLight.intensity = cfg.sunIntensity;
+    this.sunOffset.set(cfg.sunOffset[0], cfg.sunOffset[1], cfg.sunOffset[2]);
+
+    this.rimLight.color.setHex(cfg.rimHex);
+    this.rimLight.intensity = cfg.rimIntensity;
+
+    const gMat = this.world.groundPlane.material as THREE.MeshStandardMaterial;
+    if (gMat && gMat.color) {
+      gMat.color.setHex(cfg.groundHex);
+    }
+
+    const headOn = cfg.headlightIntensity > 0;
+    this.bikeHeadlightSpot.intensity = cfg.headlightIntensity;
+    this.bikeHeadlightCone.visible = headOn;
+    (this.bikeHeadlightCone.material as THREE.MeshBasicMaterial).opacity = preset === 'night' ? 0.19 : 0.1;
+
+    this.redrawSkyDome(cfg, preset);
+  }
+
+  private redrawSkyDome(cfg: EnvironmentThemeConfig, preset: EnvironmentPresetId): void {
+    const ctx = this.skyCtx;
+    const w = this.skyCanvas.width;
+    const h = this.skyCanvas.height;
+
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0.0, cfg.skyTop);
+    grad.addColorStop(0.32, cfg.skyMid);
+    grad.addColorStop(0.54, cfg.skyHorizon);
+    grad.addColorStop(1.0, cfg.skyHorizon);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    if (cfg.starAlpha > 0) {
+      ctx.fillStyle = `rgba(255, 255, 255, ${cfg.starAlpha})`;
+      for (let i = 0; i < 120; i++) {
+        const sx = (i * 173 + 29) % w;
+        const sy = (i * 97 + 17) % Math.floor(h * 0.36);
+        const r = i % 5 === 0 ? 1.8 : 1.0;
+        ctx.fillRect(sx, sy, r, r);
+      }
+    }
+
+    // Glowing Sun / Moon Disc + Atmospheric Halo in Northern Horizon
+    const discX = w * 0.56;
+    const discY = preset === 'afternoon' ? h * 0.22 : preset === 'morning' ? h * 0.34 : preset === 'sunset' ? h * 0.44 : h * 0.26;
+    const haloR = preset === 'sunset' ? 115 : 85;
+    const halo = ctx.createRadialGradient(discX, discY, 8, discX, discY, haloR);
+    halo.addColorStop(0, cfg.sunDisc);
+    halo.addColorStop(0.28, cfg.sunHalo);
+    halo.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(discX - haloR, discY - haloR, haloR * 2, haloR * 2);
+
+    ctx.fillStyle = cfg.sunDisc;
+    ctx.beginPath();
+    ctx.arc(discX, discY, preset === 'sunset' ? 24 : 16, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Soft Leonida-style Tropical Cloud Streaks
+    ctx.fillStyle = cfg.cloudTint;
+    for (let i = 0; i < 14; i++) {
+      const cx = ((i * 118 + 40) % (w - 80)) + 40;
+      const cy = h * (0.22 + (i % 5) * 0.055);
+      const cw = 72 + (i % 4) * 34;
+      const ch = 12 + (i % 3) * 6;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, cw, ch, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    this.skyTex.needsUpdate = true;
   }
 
   private resetProgressionStorage(): void {
@@ -588,12 +919,22 @@ export class HeroRastarEngine {
 
   private spawnTrafficSlot(entity: TrafficEntity, kind: VehicleKind, zPos: number, xPos: number, yaw: number): void {
     const spec = VEHICLE_SPECS[kind];
+    const dirX = -Math.sin(yaw);
+    const dirZ = -Math.cos(yaw);
+    const prevYHint = entity.kurilPhase.startsWith('eb_')
+      ? 10.6
+      : entity.kurilPhase.startsWith('wb_')
+        ? 5.2
+        : 0;
+    const surf = sampleDhakaSurface(xPos, zPos, prevYHint, dirX, dirZ);
+
     entity.kind = kind;
     entity.x = xPos;
+    entity.y = surf.groundY;
     entity.z = zPos;
     entity.yaw = yaw;
-    entity.dirX = -Math.sin(yaw);
-    entity.dirZ = -Math.cos(yaw);
+    entity.dirX = dirX;
+    entity.dirZ = dirZ;
     entity.baseSpeed =
       (spec.minSpeed + Math.random() * (spec.maxSpeed - spec.minSpeed)) * GAME_CONFIG.TRAFFIC_SPEED_BOOST;
     entity.currentSpeed = entity.baseSpeed;
@@ -602,21 +943,135 @@ export class HeroRastarEngine {
     entity.frozen = false;
     entity.nearMissedThisPass = false;
     entity.hitCooldown = 0;
+    entity.turnCooldown = 0;
 
-    // Replace visual rig cleanly if kind changed (or first build)
     if (entity.rig.group.parent) {
       this.scene.remove(entity.rig.group);
     }
     const rig = buildTrafficVehicle(kind, this.textures, entity.id + Math.floor(Math.random() * 7));
+    if (entity.routeTag === 'SPINE_TO_UTTARA' || entity.routeTag === 'KURIL_RAMP_TO_300FT') {
+      const badgeTex =
+        entity.routeTag === 'KURIL_RAMP_TO_300FT'
+          ? this.textures.routeBadge300ft
+          : this.textures.routeBadgeUttara;
+      const badgeY = spec.tier === 'large' ? 3.55 : spec.tier === 'medium' ? 2.02 : 1.75;
+      const badge = new THREE.Mesh(
+        new THREE.BoxGeometry(1.55, 0.56, 0.1),
+        new THREE.MeshBasicMaterial({ map: badgeTex })
+      );
+      badge.position.set(0, badgeY, -spec.halfLength * 0.2);
+      rig.group.add(badge);
+    }
     rig.group.scale.setScalar(0.58);
-    rig.group.rotation.set(0, yaw, 0);
-    rig.group.position.set(xPos, 0, zPos);
+    rig.group.rotation.order = 'YXZ';
+    rig.group.rotation.set(surf.pitchRad, yaw, 0);
+    rig.group.position.set(xPos, surf.groundY, zPos);
     this.scene.add(rig.group);
     entity.rig = rig;
   }
 
+  private setupInitialArterySlot(
+    i: number,
+    kind: VehicleKind
+  ): {
+    laneIdx: number;
+    laneX: number;
+    z: number;
+    yaw: number;
+    routeTag: TrafficRouteTag;
+    kurilPhase: KurilRampPhase;
+    arcAngle: number;
+  } {
+    let laneIdx =
+      i === 0 || i === 1
+        ? 0
+        : i === 2 || i === 3
+          ? 1
+          : i === 4
+            ? 2
+            : pickArteryLaneForKind(kind);
+    let laneX = GAME_CONFIG.ARTERY_LANES[laneIdx];
+    let z =
+      i === 0
+        ? -38
+        : i === 1
+          ? -50
+          : i === 2
+            ? -66
+            : i === 3
+              ? -88
+              : i === 4
+                ? -152
+                : i >= 22 && i <= 25
+                  ? -910 - (i - 22) * 44
+                  : -((i * 42 + 44) % 1090);
+    let yaw = laneX > 0 ? Math.PI : 0;
+    let routeTag: TrafficRouteTag = 'METRO_LOCAL';
+    let kurilPhase: KurilRampPhase = 'none';
+    let arcAngle = 0;
+
+    if (i >= 22 && i <= 25) {
+      laneIdx = i % 2 === 0 ? 1 : 0;
+      laneX = GAME_CONFIG.ARTERY_LANES[laneIdx];
+      yaw = 0;
+    } else if (i >= 26 && i <= 30) {
+      // Pre-seed Tejgaon Link Road (z = -1120, x = 22..120) — Keep-Left: Eastbound North (-1124.5), Westbound South (-1115.5)
+      const slot = i - 26;
+      const goEast = slot % 3 !== 0;
+      laneX = 22 + slot * 22;
+      z = goEast ? -1124.5 : -1115.5;
+      yaw = goEast ? -Math.PI / 2 : Math.PI / 2;
+    } else if (i >= 31 && i <= 35) {
+      // Dedicated straight-through Uttara vehicles (clear of Kuril Flyover ramp!)
+      const slot = i - 31;
+      routeTag = 'SPINE_TO_UTTARA';
+      const goNorth = slot < 4;
+      laneIdx = goNorth ? slot % 2 : 2 + (slot % 2);
+      laneX = CORRIDOR_CONFIG.SPINE_LANES[laneIdx];
+      z = goNorth ? -2580 - slot * 210 : -3180;
+      yaw = goNorth ? 0 : Math.PI;
+    } else if (i >= 36) {
+      // Dedicated Kuril Flyover -> 300ft vehicles (Upper 10.6m Eastbound & Lower 5.2m Westbound!)
+      const slot = i - 36;
+      routeTag = 'KURIL_RAMP_TO_300FT';
+      laneIdx = 1;
+      if (slot === 0) {
+        laneX = 136.75;
+        z = -2630;
+        yaw = 0;
+      } else if (slot === 1) {
+        laneX = 155.0;
+        z = -2785;
+        yaw = 0;
+        kurilPhase = 'eb_ramp_up';
+      } else if (slot === 2) {
+        arcAngle = Math.PI * 0.78;
+        laneX = 240.5 + 85.5 * Math.cos(arcAngle);
+        z = -2845.0 - 85.5 * Math.sin(arcAngle);
+        yaw = Math.atan2(-Math.sin(arcAngle), -Math.cos(arcAngle));
+        kurilPhase = 'eb_arc';
+      } else if (slot === 3) {
+        laneX = 330.0;
+        z = -2930.5;
+        yaw = -Math.PI / 2;
+        kurilPhase = 'eb_ramp_down';
+      } else if (slot === 4) {
+        laneX = 480.0;
+        z = -2930.5;
+        yaw = -Math.PI / 2;
+      } else {
+        arcAngle = -Math.PI * 0.72;
+        laneX = 230.0 + 61.5 * Math.cos(arcAngle);
+        z = -2848.0 + 61.5 * Math.sin(arcAngle);
+        yaw = Math.atan2(-Math.sin(arcAngle), Math.cos(arcAngle));
+        kurilPhase = 'wb_arc';
+      }
+    }
+
+    return { laneIdx, laneX, z, yaw, routeTag, kurilPhase, arcAngle };
+  }
+
   private initTrafficPools(): void {
-    // 1. Arterial Traffic across 4 keep-left lanes (seed iconic cycle, rickshaw, CNG, Nitol buses & new trucks!)
     const tier = this.getActiveBikeSpec().tier;
     for (let i = 0; i < GAME_CONFIG.ARTERY_TRAFFIC_COUNT; i++) {
       const kind: VehicleKind =
@@ -643,42 +1098,24 @@ export class HeroRastarEngine {
                             : i === 10
                               ? 'fire_truck'
                               : pickWeightedKind(false, tier);
-      const laneIdx =
-        i === 0 || i === 1
-          ? 0
-          : i === 2 || i === 3
-            ? 1
-            : i === 4
-              ? 2
-              : pickArteryLaneForKind(kind);
-      const laneX = GAME_CONFIG.ARTERY_LANES[laneIdx];
-      const isOncoming = laneX > 0;
-      const z =
-        i === 0
-          ? -38
-          : i === 1
-            ? -50
-            : i === 2
-              ? -66
-              : i === 3
-                ? -88
-                : i === 4
-                  ? -152
-                  : -((i * (GAME_CONFIG.LOOP_LENGTH / GAME_CONFIG.ARTERY_TRAFFIC_COUNT) + 34) % GAME_CONFIG.LOOP_LENGTH);
-      const yaw = isOncoming ? Math.PI : 0;
 
+      const slot = this.setupInitialArterySlot(i, kind);
       const dummyRig = buildTrafficVehicle(kind, this.textures, i);
       const entity: TrafficEntity = {
         id: i,
         isCityVehicle: false,
+        routeTag: slot.routeTag,
+        kurilPhase: slot.kurilPhase,
+        arcAngle: slot.arcAngle,
         kind,
         rig: dummyRig,
-        x: laneX,
-        z,
-        yaw,
-        dirX: -Math.sin(yaw),
-        dirZ: -Math.cos(yaw),
-        laneIdx,
+        x: slot.laneX,
+        y: 0,
+        z: slot.z,
+        yaw: slot.yaw,
+        dirX: -Math.sin(slot.yaw),
+        dirZ: -Math.cos(slot.yaw),
+        laneIdx: slot.laneIdx,
         baseSpeed: 12,
         currentSpeed: 12,
         targetSpeed: 12,
@@ -688,12 +1125,12 @@ export class HeroRastarEngine {
         nearMissedThisPass: false,
         hitCooldown: 0,
         lookaheadTimer: (i % 5) * 0.04,
+        turnCooldown: 0,
       };
-      this.spawnTrafficSlot(entity, kind, z, laneX, yaw);
+      this.spawnTrafficSlot(entity, kind, slot.z, slot.laneX, slot.yaw);
       this.traffic.push(entity);
     }
 
-    // 2. City Side-Street & Cross-Street Traffic on N-S avenues & E-W boulevards/Golis
     for (let i = 0; i < GAME_CONFIG.CITY_TRAFFIC_COUNT; i++) {
       const laneIdx = i % this.world.cityLanes.length;
       const lane = this.world.cityLanes[laneIdx];
@@ -704,9 +1141,13 @@ export class HeroRastarEngine {
       const entity: TrafficEntity = {
         id: 100 + i,
         isCityVehicle: true,
+        routeTag: 'METRO_LOCAL',
+        kurilPhase: 'none',
+        arcAngle: 0,
         kind,
         rig: dummyRig,
         x,
+        y: 0,
         z,
         yaw,
         dirX: -Math.sin(yaw),
@@ -721,6 +1162,7 @@ export class HeroRastarEngine {
         nearMissedThisPass: false,
         hitCooldown: 0,
         lookaheadTimer: (i % 5) * 0.05,
+        turnCooldown: 0,
       };
       this.spawnTrafficSlot(entity, kind, z, x, yaw);
       entity.baseSpeed = Math.min(entity.baseSpeed, 10.5);
@@ -778,17 +1220,30 @@ export class HeroRastarEngine {
       }
     });
 
-    // Sidewalk pedestrians along artery & downtown sidewalks
-    for (let i = 0; i < 18; i++) {
+    // Sidewalk pedestrians along Metro & Spine + Neela Market
+    for (let i = 0; i < 24; i++) {
       const rig = buildPedestrian(shirtPalette[(i + 2) % shirtPalette.length], 0x334155);
       const side = i % 2 === 0 ? -1 : 1;
-      const x =
-        i >= 14
-          ? side * 56.5
-          : i >= 10
-            ? side * 28.5
-            : side * (GAME_CONFIG.ARTERY_HALF_WIDTH + 1.5);
-      const pz = -((i * 39 + 24) % GAME_CONFIG.LOOP_LENGTH);
+      let x = 0;
+      let pz = 0;
+      if (i >= 18) {
+        // Neela Market & Bikers Rest Room (300ft South/North edges)
+        x = CORRIDOR_CONFIG.NEELA_MARKET_X + (i - 20.5) * 14;
+        pz = CORRIDOR_CONFIG.EXPRESSWAY_Z + (side > 0 ? 19.2 : -19.2);
+      } else if (i >= 12) {
+        // Tejgaon / Mohakhali / Banani / Uttara Spine sidewalks
+        x = CORRIDOR_CONFIG.SPINE_X + side * (CORRIDOR_CONFIG.SPINE_HALF_WIDTH + 1.5);
+        pz = -1260 - (i - 12) * 380;
+      } else {
+        // Metro artery & downtown avenues
+        x =
+          i >= 9
+            ? side * 56.5
+            : i >= 6
+              ? side * 28.5
+              : side * (GAME_CONFIG.ARTERY_HALF_WIDTH + 1.5);
+        pz = -((i * 75 + 24) % 1020);
+      }
       rig.group.position.set(x, 0.14, pz);
       this.scene.add(rig.group);
       this.pedestrians.push({
@@ -811,7 +1266,33 @@ export class HeroRastarEngine {
     }
   }
 
-  private samplePickupLocation(slotIdx: number): { x: number; z: number } {
+  private samplePickupLocation(slotIdx: number): { x: number; y: number; z: number } {
+    // Place pickups ahead of the player's current corridor so every district stays rich
+    if (this.playerX > 165) {
+      const lanesZ = [...CORRIDOR_CONFIG.EXPRESSWAY_OUTBOUND_LANES_Z, ...CORRIDOR_CONFIG.EXPRESSWAY_INBOUND_LANES_Z];
+      const z = lanesZ[slotIdx % lanesZ.length];
+      const x = THREE.MathUtils.clamp(
+        this.playerX + (slotIdx % 2 === 0 ? 1 : -1) * (35 + (slotIdx * 23) % 190),
+        220,
+        2190
+      );
+      return { x, y: 0, z };
+    }
+    if (this.playerX >= 12 && this.playerX < 100 && Math.abs(this.playerZ - CORRIDOR_CONFIG.TEJGAON_TURNOFF_Z) < 60) {
+      const x = THREE.MathUtils.clamp(20 + ((slotIdx * 19) % 110), 16, 130);
+      const z = slotIdx % 2 === 0 ? -1115.5 : -1124.5;
+      return { x, y: 0, z };
+    }
+    if (this.playerX >= 100 && this.playerX <= 165) {
+      const x = CORRIDOR_CONFIG.SPINE_LANES[slotIdx % CORRIDOR_CONFIG.SPINE_LANES.length];
+      const z = THREE.MathUtils.clamp(
+        this.playerZ - 25 - ((slotIdx * 34) % 240),
+        CORRIDOR_CONFIG.SPINE_MIN_Z + 30,
+        CORRIDOR_CONFIG.SPINE_MAX_Z - 20
+      );
+      const surf = sampleDhakaSurface(x, z, 0);
+      return { x, y: surf.groundY, z };
+    }
     const roadXs = [
       ...GAME_CONFIG.ARTERY_LANES,
       GAME_CONFIG.AVENUE_LEFT_INNER_X - 2.2,
@@ -820,8 +1301,8 @@ export class HeroRastarEngine {
       GAME_CONFIG.AVENUE_RIGHT_OUTER_X + 2.0,
     ];
     const x = roadXs[(slotIdx * 3 + Math.floor(Math.random() * roadXs.length)) % roadXs.length];
-    const z = -((slotIdx * 38 + 46 + Math.random() * 14) % GAME_CONFIG.LOOP_LENGTH);
-    return { x, z };
+    const z = -((slotIdx * 52 + 46 + Math.random() * 14) % 1140);
+    return { x, y: 0, z };
   }
 
   private initPickups(): void {
@@ -829,14 +1310,15 @@ export class HeroRastarEngine {
     for (let i = 0; i < 18; i++) {
       const kind = kinds[i % kinds.length];
       const mesh = buildCollectiblePickup(kind);
-      const { x, z } = this.samplePickupLocation(i);
-      mesh.position.set(x, 0.9, z);
+      const { x, y, z } = this.samplePickupLocation(i);
+      mesh.position.set(x, y + 0.9, z);
       this.scene.add(mesh);
       this.pickups.push({
         id: i,
         kind,
         mesh,
         x,
+        y,
         z,
         respawnTimer: 0,
         phase: i * 0.65,
@@ -976,6 +1458,7 @@ export class HeroRastarEngine {
     }
     this.gameState = GameState.PLAYING;
     this.playerX = -3.25;
+    this.playerY = 0;
     this.playerZ = -18;
     this.playerYaw = 0;
     this.forwardSpeed = 6;
@@ -983,10 +1466,12 @@ export class HeroRastarEngine {
     this.smoothedSteer = 0;
     this.bikeLean = 0;
     this.bikePitch = 0;
+    this.bikeSlopePitch = 0;
     this.bikeRollCrash = 0;
     this.postHitRecoveryTimer = 0;
     this.wasBoosting = false;
     this.freeNitroTimer = 0;
+    this.currentCorridor = 'metro';
     this.motion.recalibrate();
 
     this.fuelAmount = this.getActiveBikeSpec().fuelCapacity;
@@ -997,6 +1482,9 @@ export class HeroRastarEngine {
     this.showroomExitCooldown = 0;
     this.showroomVisitedLock = false;
     this.showroomSaluteLock = false;
+    this.restRoomVisitedLock = false;
+    this.purbachalTurnBonusGiven = false;
+    this.uttaraTurnBonusGiven = false;
     this.bankSaveAccum = 0;
     this.score = 0;
     this.isNewBest = false;
@@ -1047,31 +1535,26 @@ export class HeroRastarEngine {
       d.mesh.visible = false;
     }
 
-    // Reset Traffic cleanly away from spawn
+    // Reset Traffic cleanly away from spawn across Metro, Tejgaon Link, Uttara & Kuril Flyover corridors
     for (let i = 0; i < this.traffic.length; i++) {
       const t = this.traffic[i];
       if (!t.isCityVehicle) {
-        const laneX = GAME_CONFIG.ARTERY_LANES[t.laneIdx];
-        const yaw = laneX > 0 ? Math.PI : 0;
-        let z =
-          t.id === 0
-            ? -38
-            : t.id === 1
-              ? -50
-              : t.id === 2
-                ? -66
-                : t.id === 3
-                  ? -88
-                  : t.id === 4
-                    ? -152
-                    : -((t.id * (GAME_CONFIG.LOOP_LENGTH / GAME_CONFIG.ARTERY_TRAFFIC_COUNT) + 34) % GAME_CONFIG.LOOP_LENGTH);
-        if (Math.abs(wrapLoopDelta(z, this.playerZ)) < 18) {
+        const slot = this.setupInitialArterySlot(t.id, t.kind);
+        t.routeTag = slot.routeTag;
+        t.kurilPhase = slot.kurilPhase;
+        t.arcAngle = slot.arcAngle;
+        t.laneIdx = slot.laneIdx;
+        let z = slot.z;
+        if (slot.routeTag === 'METRO_LOCAL' && Math.abs(slot.laneX) < 12 && Math.abs(z - this.playerZ) < 18) {
           z -= 44;
         }
-        this.spawnTrafficSlot(t, t.kind, z, laneX, yaw);
+        this.spawnTrafficSlot(t, t.kind, z, slot.laneX, slot.yaw);
       } else {
         const lane = this.world.cityLanes[t.laneIdx];
         const pt = this.sampleCityLanePoint(lane, ((t.id - 100) * 0.37) % 1);
+        t.routeTag = 'METRO_LOCAL';
+        t.kurilPhase = 'none';
+        t.arcAngle = 0;
         this.spawnTrafficSlot(t, t.kind, pt.z, pt.x, pt.yaw);
         t.baseSpeed = Math.min(t.baseSpeed, 10.5);
         t.currentSpeed = t.baseSpeed;
@@ -1082,10 +1565,11 @@ export class HeroRastarEngine {
     for (const pk of this.pickups) {
       const loc = this.samplePickupLocation(pk.id);
       pk.x = loc.x;
+      pk.y = loc.y;
       pk.z = loc.z;
       pk.respawnTimer = 0;
       pk.mesh.visible = true;
-      pk.mesh.position.set(pk.x, 0.9, pk.z);
+      pk.mesh.position.set(pk.x, pk.y + 0.9, pk.z);
     }
 
     // Reset Pedestrians
@@ -1106,7 +1590,7 @@ export class HeroRastarEngine {
     this.camera.position.set(this.playerX, 2.35, this.playerZ + 5.0);
     _lookTarget.set(this.playerX, 1.0, this.playerZ - 10);
     this.camera.lookAt(_lookTarget);
-    this.world.updateAroundPlayer(this.playerZ, this.elapsedSec);
+    this.world.updateAroundPlayer(this.playerZ, this.elapsedSec, this.playerX);
     this.emitHud();
   }
 
@@ -1141,6 +1625,7 @@ export class HeroRastarEngine {
 
   public disableMotionControl(): void {
     this.motion.disable();
+    this.smoothedSteer = 0;
   }
 
   public getMotionStatus(): MotionStatus {
@@ -1375,6 +1860,7 @@ export class HeroRastarEngine {
       const dt = Math.min(Math.max(rawDt, 0.001), 0.05);
 
       this.update(dt);
+      this.skyDome.position.copy(this.camera.position);
       this.renderer.render(this.scene, this.camera);
 
       if (this.isSoftwareGl) {
@@ -1526,7 +2012,11 @@ export class HeroRastarEngine {
       this.camera.position.lerp(_camTarget, 1 - Math.exp(-4 * dt));
       _lookTarget.set(this.playerX, 0.9, this.playerZ - 6);
       this.camera.lookAt(_lookTarget);
-      this.sunLight.position.set(this.playerX + 28, 46, this.playerZ + 22);
+      this.sunLight.position.set(
+        this.playerX + this.sunOffset.x,
+        this.sunOffset.y,
+        this.playerZ + this.sunOffset.z
+      );
       this.sunLight.target.position.set(this.playerX, 0, this.playerZ - 15);
       return;
     }
@@ -1540,7 +2030,7 @@ export class HeroRastarEngine {
       this.playerZ += fwdZ * this.forwardSpeed * dt;
 
       this.bikeRollCrash = THREE.MathUtils.damp(this.bikeRollCrash, Math.PI * 0.45, 7, dt);
-      this.heroRig.group.position.set(this.playerX, 0.1, this.playerZ);
+      this.heroRig.group.position.set(this.playerX, this.playerY + 0.1, this.playerZ);
       this.heroRig.group.rotation.set(0, this.playerYaw, 0);
       this.heroRig.leanGroup.rotation.set(0.12, 0.25, this.bikeRollCrash);
       this.audio.updateEngine(0, false, false);
@@ -1552,6 +2042,7 @@ export class HeroRastarEngine {
       const dz = this.playerZ - sz;
       const dist = Math.hypot(dx, dz);
       this.slapperRig.group.rotation.y = Math.atan2(dx, dz);
+      this.slapperRig.group.position.y = this.playerY;
 
       if (dist > 1.15) {
         const runStep = Math.min(dist - 1.1, 6.2 * dt);
@@ -1569,7 +2060,7 @@ export class HeroRastarEngine {
           this.audio.playSlap();
           this.cameraShake = 0.75;
           this.flashScreen('amber', 0.22);
-          this.spawnBurst(this.playerX, 1.0, this.playerZ, 0xfef08a, 10);
+          this.spawnBurst(this.playerX, this.playerY + 1.0, this.playerZ, 0xfef08a, 10);
           const deathQuip = FUNNY_DEATH_LINES_BN[Math.floor(Math.random() * FUNNY_DEATH_LINES_BN.length)];
           this.pushPopup('ঠাস! চড় খেলেন হিরো!', deathQuip, 'danger');
         }
@@ -1579,9 +2070,9 @@ export class HeroRastarEngine {
       }
 
       // Snap crash focus camera
-      _camTarget.set(this.playerX + 3.6, 2.2, this.playerZ + 4.2);
+      _camTarget.set(this.playerX + 3.6, this.playerY + 2.2, this.playerZ + 4.2);
       this.camera.position.lerp(_camTarget, 1 - Math.exp(-6 * dt));
-      _lookTarget.set(this.playerX, 0.85, this.playerZ);
+      _lookTarget.set(this.playerX, this.playerY + 0.85, this.playerZ);
       this.camera.lookAt(_lookTarget);
 
       if (this.crashTimer <= 0) {
@@ -1601,21 +2092,25 @@ export class HeroRastarEngine {
 
     if (this.gameState === GameState.SHOWROOM) {
       this.audio.updateEngine(0, false, false, this.getActiveBikeSpec().tier);
-      this.heroRig.group.position.set(this.playerX, 0, this.playerZ);
+      this.heroRig.group.position.set(this.playerX, this.playerY, this.playerZ);
       this.heroRig.group.rotation.set(0, this.playerYaw, 0);
       this.heroRig.leanGroup.rotation.set(0, 0, 0);
 
       const angle = this.elapsedSec * 0.55;
       _camTarget.set(
         this.playerX + Math.sin(angle) * 4.2,
-        1.95,
+        this.playerY + 1.95,
         this.playerZ + Math.cos(angle) * 4.2
       );
       this.camera.position.lerp(_camTarget, 1 - Math.exp(-5 * dt));
-      _lookTarget.set(this.playerX, 0.85, this.playerZ);
+      _lookTarget.set(this.playerX, this.playerY + 0.85, this.playerZ);
       this.camera.lookAt(_lookTarget);
-      this.sunLight.position.set(this.playerX + 28, 46, this.playerZ + 22);
-      this.sunLight.target.position.set(this.playerX, 0, this.playerZ - 12);
+      this.sunLight.position.set(
+        this.playerX + this.sunOffset.x,
+        this.playerY + this.sunOffset.y,
+        this.playerZ + this.sunOffset.z
+      );
+      this.sunLight.target.position.set(this.playerX, this.playerY, this.playerZ - 12);
       return;
     }
 
@@ -1689,14 +2184,55 @@ export class HeroRastarEngine {
     // so the on-screen buttons always win when both are available.
     const motionSteer = this.motion.getSteer(dt);
     const rawSteer = keySteer !== 0 ? keySteer : motionSteer;
-    const steerRate = rawSteer !== 0 ? 5.4 : 14.0;
+    // Steeper ramp-in so taps build up smoothly (no instant snap), while releasing
+    // the stick still re-centers quickly so you never fight a lingering lean.
+    const steerRate = rawSteer !== 0 ? 3.8 : 13.0;
     this.smoothedSteer = THREE.MathUtils.damp(this.smoothedSteer, rawSteer, steerRate, dt);
+    // Expo curve: small inputs stay gentle and precise, only a full press reaches
+    // full lock. This removes the twitchy "chakes" feeling on light taps.
+    const steerCurve = (v: number): number => {
+      const a = Math.abs(v);
+      const curved = a * a * (3 - 2 * a); // smoothstep — soft at the edges, firm mid-range
+      return Math.sign(v) * curved;
+    };
+    const effectiveSteer = steerCurve(this.smoothedSteer);
+
+    // 2b. Automatic U-Turn Speed Reduction & Cornering Assist
+    const inUTurnPlaza = this.isInUTurnZone(this.playerX, this.playerZ);
+    const isSharpUTurnSteer = Math.abs(this.smoothedSteer) > 0.72;
+    if (inUTurnPlaza && this.forwardSpeed > 4.0) {
+      const uTurnCapMps = Math.abs(this.smoothedSteer) > 0.35 ? 11.2 : 13.5; // ~38-46 km/h smooth U-turn pace
+      if (this.forwardSpeed > uTurnCapMps) {
+        this.forwardSpeed = THREE.MathUtils.damp(this.forwardSpeed, uTurnCapMps, 4.4, dt);
+      }
+    } else if (isSharpUTurnSteer && this.forwardSpeed > 15.2 && !isBoosting) {
+      // Gentle auto-slowdown when making a tight hairpin U-turn anywhere on the road
+      this.forwardSpeed = THREE.MathUtils.damp(this.forwardSpeed, 14.8, 2.2, dt);
+    }
 
     const absSpeed = Math.abs(this.forwardSpeed);
     const speedNorm = THREE.MathUtils.clamp(absSpeed / bikeSpec.maxBoostMps, 0, 1);
-    const turnAuthority = THREE.MathUtils.lerp(1.48, 0.78, speedNorm) * (absSpeed < 1.0 ? 0.35 : 1.0);
+    // Progressive, speed-scaled turn authority. Previously a flat 1.48 (low) → 0.78
+    // (high) made the bike twitchy and prone to over-steering ("chakes") at low and
+    // mid speed. The curve below is gentler at crawl speed (precise maneuvering),
+    // peaks around cruising speed, then settles down at high speed for stability.
+    //   speedNorm 0.0 → 0.92   (easy, controllable maneuvering)
+    //   speedNorm 0.5 → 1.12   (confident mid-speed cornering)
+    //   speedNorm 1.0 → 0.66   (calm, planted high-speed lane changes)
+    const lowAuth = 0.92;
+    const midAuth = 1.12;
+    const highAuth = 0.66;
+    let turnAuthority: number;
+    if (speedNorm < 0.5) {
+      turnAuthority = THREE.MathUtils.lerp(lowAuth, midAuth, speedNorm / 0.5);
+    } else {
+      turnAuthority = THREE.MathUtils.lerp(midAuth, highAuth, (speedNorm - 0.5) / 0.5);
+    }
+    turnAuthority *=
+      (absSpeed < 1.0 ? 0.35 : 1.0) * // near-standstill: don't pivot on the spot
+      (inUTurnPlaza ? 1.2 : 1.0); // U-turn plazas still allow tight hairpins
     const reverseFlip = this.forwardSpeed < -0.5 ? -1 : 1;
-    this.playerYaw += this.smoothedSteer * turnAuthority * reverseFlip * dt;
+    this.playerYaw += effectiveSteer * turnAuthority * reverseFlip * dt;
 
     // Forward vector from yaw (0 = -Z)
     const fwdX = -Math.sin(this.playerYaw);
@@ -1709,14 +2245,29 @@ export class HeroRastarEngine {
     this.playerX += (fwdX * this.forwardSpeed + Math.cos(this.playerYaw) * this.lateralSlip) * dt;
     this.playerZ += (fwdZ * this.forwardSpeed - Math.sin(this.playerYaw) * this.lateralSlip) * dt;
 
-    // 3. Solid Building & Perimeter Collisions (Scrape smoothly without sideways bounce!)
+    // 3. Solid Building, Corridor Bounds & Flyover Guardrails
     this.resolveSolidCollisions();
 
-    // 4. Seamless 720 m Loop Wrap (shifts artery vehicles & peds, rearranges city grid vehicles!)
-    if (this.playerZ <= -GAME_CONFIG.LOOP_LENGTH) {
-      this.wrapWorld(+GAME_CONFIG.LOOP_LENGTH);
-    } else if (this.playerZ > 0) {
-      this.wrapWorld(-GAME_CONFIG.LOOP_LENGTH);
+    // 4. Sample Continuous 3D Road & Flyover Surface Elevation + Slope Pitch
+    const surface = sampleDhakaSurface(this.playerX, this.playerZ, this.playerY, fwdX, fwdZ);
+    this.playerY = THREE.MathUtils.damp(this.playerY, surface.groundY, 18, dt);
+    this.bikeSlopePitch = THREE.MathUtils.damp(this.bikeSlopePitch, surface.pitchRad, 14, dt);
+    this.currentCorridor = surface.corridor;
+
+    // U-Turn Destination Bonuses (Purbachal 300ft End & Uttara End)
+    if (!this.purbachalTurnBonusGiven && this.playerX > CORRIDOR_CONFIG.PURBACHAL_UTURN_X - 35) {
+      this.purbachalTurnBonusGiven = true;
+      this.addPoints(400);
+      this.audio.playDing(this.combo);
+      this.flashScreen('green', 0.22);
+      this.pushPopup('পূর্বাচল শেষ প্রান্ত!', 'ইউ-টার্ন নিয়ে মহাখালী ফিরুন • +400 pts!', 'bonus');
+    }
+    if (!this.uttaraTurnBonusGiven && this.playerZ < CORRIDOR_CONFIG.UTTARA_UTURN_Z + 40) {
+      this.uttaraTurnBonusGiven = true;
+      this.addPoints(400);
+      this.audio.playDing(this.combo);
+      this.flashScreen('green', 0.22);
+      this.pushPopup('উত্তরা হিরো ও ইউ-টার্ন!', 'শোরুম ঘুরে মহাখালী ফিরুন • +400 pts!', 'bonus');
     }
 
     if (this.forwardSpeed > 0) {
@@ -1798,14 +2349,14 @@ export class HeroRastarEngine {
       this.emptyStoppedTimer = 0;
     }
 
-    // 5b. Niloy Hero Showroom Pad Entry (ride onto showroom pad & slow <= 25 km/h; once per visit)
+    // 5b. Niloy Hero Showroom Pad Entry
     const activeShowroom = this.getActiveShowroom();
     if (!activeShowroom) {
       this.showroomVisitedLock = false;
       this.showroomSaluteLock = false;
     } else if (!this.showroomSaluteLock) {
       this.showroomSaluteLock = true;
-      this.pushPopup('স্যালুট বস! শোরুমে স্বাগতম!', 'নিলয় হিরো টিম আপনাকে স্বাগত জানাচ্ছে!', 'bonus');
+      this.pushPopup('স্যালুট বস! শোরুমে স্বাগতম!', `${activeShowroom.labelBn}-এ স্বাগতম!`, 'bonus');
     }
     const showShowroomBanner =
       activeShowroom !== null && !this.showroomVisitedLock && this.showroomExitCooldown <= 0;
@@ -1819,26 +2370,47 @@ export class HeroRastarEngine {
       this.gameState = GameState.SHOWROOM;
       this.audio.updateEngine(0, false, false, bikeSpec.tier);
       this.audio.playShowroomOpen();
-      this.emitHud(false, inFuelZone, false);
+      this.emitHud(false, inFuelZone, false, false);
       return;
     }
 
+    // 5c. 300 Feet Neela Market Bikers Rest Room (tea & snack stop: full tank + calm mob + free nitro)
+    const activeRestRoom = this.getActiveRestRoom();
+    const isInRestRoomZone = activeRestRoom !== null;
+    if (!activeRestRoom) {
+      this.restRoomVisitedLock = false;
+    } else if (!this.restRoomVisitedLock && speedKmh <= GAME_CONFIG.RESTROOM_MAX_SPEED_KMH) {
+      this.restRoomVisitedLock = true;
+      this.fuelAmount = bikeSpec.fuelCapacity;
+      for (const p of this.pedestrians) {
+        if (p.mode === 'chasing') {
+          p.mode = p.isCrosswalk ? 'crossing' : 'sidewalk';
+          p.rig.angryBadge.visible = false;
+        }
+      }
+      this.freeNitroTimer = Math.max(this.freeNitroTimer, 4.0);
+      this.addPoints(350);
+      this.audio.playTankFull();
+      this.flashScreen('green', 0.3);
+      this.pushPopup('বাইকারস রেস্ট রুম!', 'চা-নাস্তা ব্রেক: ফুল ট্যাংক, পাবলিক শান্ত ও +350 pts!', 'refuel');
+    }
+
     // 6. Violations: Wrong-Way (+15/s) & Sidewalk Driving (+10/s)
-    this.updateViolations(dt, speedKmh);
+    this.updateViolations(dt, speedKmh, fwdX, fwdZ);
 
     // 7. Hero Bike Kinematics & Exhaust Smoke
-    const targetLean = this.smoothedSteer * 0.36 * THREE.MathUtils.clamp(absSpeed / 10, 0.2, 1.0);
-    this.bikeLean = THREE.MathUtils.damp(this.bikeLean, targetLean, 10, dt);
+    const targetLean = effectiveSteer * 0.3 * THREE.MathUtils.clamp(absSpeed / 10, 0.2, 1.0);
+    this.bikeLean = THREE.MathUtils.damp(this.bikeLean, targetLean, 7, dt);
     const targetPitch = this.input.handbrake || brakingWithTouchBrake ? -0.09 : isBoosting ? 0.08 : 0;
     this.bikePitch = THREE.MathUtils.damp(this.bikePitch, targetPitch, 8, dt);
 
-    this.heroRig.group.position.set(this.playerX, 0, this.playerZ);
+    this.heroRig.group.position.set(this.playerX, this.playerY, this.playerZ);
     this.heroRig.group.rotation.set(0, this.playerYaw, 0);
-    this.heroRig.leanGroup.rotation.set(this.bikePitch, 0, this.bikeLean);
+    this.heroRig.leanGroup.rotation.set(this.bikePitch + this.bikeSlopePitch, 0, this.bikeLean);
     this.heroRig.frontFork.rotation.y = THREE.MathUtils.damp(
       this.heroRig.frontFork.rotation.y,
-      this.smoothedSteer * 0.24,
-      12,
+      effectiveSteer * 0.2,
+      10,
       dt
     );
 
@@ -1916,68 +2488,85 @@ export class HeroRastarEngine {
     }
 
     this.updateChaseCamera(dt, isBoosting);
-    this.sunLight.position.set(this.playerX + 28, 46, this.playerZ + 22);
-    this.sunLight.target.position.set(this.playerX, 0, this.playerZ - 16);
+    this.sunLight.position.set(
+      this.playerX + this.sunOffset.x,
+      this.playerY + this.sunOffset.y,
+      this.playerZ + this.sunOffset.z
+    );
+    this.sunLight.target.position.set(this.playerX, this.playerY, this.playerZ - 16);
 
     this.hudEmitAccumulator += dt;
     if (this.hudEmitAccumulator >= 0.05 || isRefueling) {
       this.hudEmitAccumulator = 0;
-      this.emitHud(isRefueling, inFuelZone, showShowroomBanner);
+      this.emitHud(isRefueling, inFuelZone, showShowroomBanner, isInRestRoomZone);
     }
+  }
+
+  private isInUTurnZone(x: number, z: number): boolean {
+    // 1. Metro End U-Turn Loop (z <= -1198)
+    if (Math.abs(x) <= 20 && z <= -1198) return true;
+    // 2. Tejgaon South U-Turn Loop (z >= -1064, x ~ 140)
+    if (x >= 122 && x <= 158 && z >= -1066 && z <= -1000) return true;
+    // 3. Uttara End U-Turn Loop (z <= -3640, x ~ 140)
+    if (x >= 122 && x <= 158 && z <= -3640) return true;
+    // 4. Purbachal 300ft End U-Turn Loop (x >= 2105, z ~ -2920)
+    if (x >= 2105 && z <= -2894 && z >= -2946) return true;
+    // 5. 300ft Canal Crossing Bridges when crossing between Eastbound & Westbound
+    if ((x >= 778 && x <= 818) || (x >= 1356 && x <= 1404)) {
+      if (z >= -2926 && z <= -2914) return true;
+    }
+    return false;
   }
 
   private resolveSolidCollisions(): void {
     const bikeR = 0.52;
     let scraped = false;
 
-    // 1. Perimeter walls at x = ±55.2
-    const maxX = GAME_CONFIG.WORLD_PERIMETER_X - 0.85;
-    if (this.playerX < -maxX) {
-      this.playerX = -maxX;
-      scraped = true;
-    } else if (this.playerX > maxX) {
-      this.playerX = maxX;
+    // 1. Multi-corridor road bounds, 300ft canal banks & elevated flyover guardrails
+    const clamped = clampToDrivableCorridors(this.playerX, this.playerZ, this.playerY);
+    if (clamped.scraped) {
+      this.playerX = clamped.x;
+      this.playerZ = clamped.z;
       scraped = true;
     }
 
-    // 2. Center Metro Rail piers outside intersections & Goli crossings (|x| < 1.05)
-    const atIntersectionOrGoli =
-      GAME_CONFIG.INTERSECTION_Z_POSITIONS.some((iz) => Math.abs(wrapLoopDelta(this.playerZ, iz)) < 11) ||
-      GOLI_ALLEY_Z_POSITIONS.some((gz) => Math.abs(wrapLoopDelta(this.playerZ, gz)) < 5.2);
-    if (!atIntersectionOrGoli && Math.abs(this.playerX) < GAME_CONFIG.MEDIAN_HALF_WIDTH + 0.36) {
-      this.playerX = (this.playerX <= 0 ? -1 : 1) * (GAME_CONFIG.MEDIAN_HALF_WIDTH + 0.36);
-      scraped = true;
-    }
-
-    // 3. Solid City Building AABBs (Bld_*)
-    for (const b of this.world.solidBuildings) {
-      const bMidZ = (b.baseMinZ + b.baseMaxZ) * 0.5;
-      const relZ = wrapLoopDelta(bMidZ, this.playerZ);
-      if (Math.abs(relZ) > 20) continue;
-
-      const halfD = (b.baseMaxZ - b.baseMinZ) * 0.5;
-      const actualMinZ = this.playerZ + relZ - halfD;
-      const actualMaxZ = this.playerZ + relZ + halfD;
-
-      const closestX = THREE.MathUtils.clamp(this.playerX, b.minX, b.maxX);
-      const closestZ = THREE.MathUtils.clamp(this.playerZ, actualMinZ, actualMaxZ);
-      const dx = this.playerX - closestX;
-      const dz = this.playerZ - closestZ;
-      const distSq = dx * dx + dz * dz;
-
-      if (distSq < bikeR * bikeR) {
-        const dist = Math.sqrt(distSq);
-        if (dist > 0.0001) {
-          const push = bikeR - dist;
-          this.playerX += (dx / dist) * push;
-          this.playerZ += (dz / dist) * push;
-        } else {
-          // Inside AABB fallback: push out horizontally
-          const toLeft = Math.abs(this.playerX - b.minX);
-          const toRight = Math.abs(b.maxX - this.playerX);
-          this.playerX = toLeft < toRight ? b.minX - bikeR : b.maxX + bikeR;
-        }
+    // 2. Metro Rail center piers along Metro Corridor (x ~ 0, z = -1194..0), open at intersections, Golis, Tejgaon turnoff & Metro End U-Turn
+    if (Math.abs(this.playerX) < 12 && this.playerZ > -1194 && this.playerZ < 0) {
+      const atIntersectionOrTurnoff =
+        GAME_CONFIG.INTERSECTION_Z_POSITIONS.some((iz) => Math.abs(this.playerZ - iz) < 11) ||
+        GOLI_ALLEY_Z_POSITIONS.some((gz) => Math.abs(this.playerZ - gz) < 5.2) ||
+        Math.abs(this.playerZ - CORRIDOR_CONFIG.TEJGAON_TURNOFF_Z) < 18;
+      if (!atIntersectionOrTurnoff && Math.abs(this.playerX) < GAME_CONFIG.MEDIAN_HALF_WIDTH + 0.36) {
+        this.playerX = (this.playerX <= 0 ? -1 : 1) * (GAME_CONFIG.MEDIAN_HALF_WIDTH + 0.36);
         scraped = true;
+      }
+    }
+
+    // 3. Solid City Building AABBs (only at ground level; flyovers pass cleanly overhead!)
+    if (this.playerY < 2.0) {
+      for (const b of this.world.solidBuildings) {
+        if (Math.abs(this.playerX - (b.minX + b.maxX) * 0.5) > 25) continue;
+        if (Math.abs(this.playerZ - (b.minZ + b.maxZ) * 0.5) > 25) continue;
+
+        const closestX = THREE.MathUtils.clamp(this.playerX, b.minX, b.maxX);
+        const closestZ = THREE.MathUtils.clamp(this.playerZ, b.minZ, b.maxZ);
+        const dx = this.playerX - closestX;
+        const dz = this.playerZ - closestZ;
+        const distSq = dx * dx + dz * dz;
+
+        if (distSq < bikeR * bikeR) {
+          const dist = Math.sqrt(distSq);
+          if (dist > 0.0001) {
+            const push = bikeR - dist;
+            this.playerX += (dx / dist) * push;
+            this.playerZ += (dz / dist) * push;
+          } else {
+            const toLeft = Math.abs(this.playerX - b.minX);
+            const toRight = Math.abs(b.maxX - this.playerX);
+            this.playerX = toLeft < toRight ? b.minX - bikeR : b.maxX + bikeR;
+          }
+          scraped = true;
+        }
       }
     }
 
@@ -1986,58 +2575,23 @@ export class HeroRastarEngine {
       this.forwardSpeed *= 0.96;
       this.cameraShake = Math.max(this.cameraShake, 0.16);
       this.audio.playThud();
-      this.spawnParticle(this.playerX, 0.45, this.playerZ, (Math.random() - 0.5) * 4, 2, (Math.random() - 0.5) * 4, 0xfacc15, 0.25, 0.35, 0.05);
-    }
-  }
-
-  private wrapWorld(offsetZ: number): void {
-    this.playerZ += offsetZ;
-    // Shift camera by the exact loop offset so wrapping 720m is 100% seamless with zero camera whip!
-    this.camera.position.z += offsetZ;
-    this.world.updateAroundPlayer(this.playerZ, this.elapsedSec);
-
-    if (offsetZ > 0) {
-      this.lapCount += 1;
-      this.addPoints(250);
-      this.pushPopup(`ল্যাপ ${this.lapCount} বোনাস!`, '+250 District Bonus', 'bonus');
-      this.audio.playDing(this.combo);
-    }
-
-    for (const inter of this.world.intersections) {
-      inter.violatedThisPass = false;
-      inter.bonusAwardedThisPass = false;
-    }
-
-    for (const t of this.traffic) {
-      if (!t.isCityVehicle) {
-        t.z += offsetZ;
-        t.rig.group.position.z = t.z;
-      } else {
-        t.rig.group.position.z = this.playerZ + wrapLoopDelta(t.z, this.playerZ);
-      }
-    }
-
-    for (const pk of this.pickups) {
-      pk.z += offsetZ;
-      pk.mesh.position.z = this.playerZ + wrapLoopDelta(pk.z, this.playerZ);
-    }
-
-    for (const p of this.pedestrians) {
-      p.z += offsetZ;
-      p.rig.group.position.z = this.playerZ + wrapLoopDelta(p.z, this.playerZ);
-    }
-    for (const pt of this.particles) {
-      if (pt.active) pt.mesh.position.z += offsetZ;
-    }
-    for (const d of this.debris) {
-      if (d.active) d.mesh.position.z += offsetZ;
+      this.spawnParticle(
+        this.playerX,
+        this.playerY + 0.45,
+        this.playerZ,
+        (Math.random() - 0.5) * 4,
+        2,
+        (Math.random() - 0.5) * 4,
+        0xfacc15,
+        0.25,
+        0.35,
+        0.05
+      );
     }
   }
 
   private updateFuelHose(station: FuelStationNode): void {
-    const relZ = wrapLoopDelta(station.baseZ, this.playerZ);
-    const nozzleWorldZ = this.playerZ + relZ;
-    _hoseStart.set(station.nozzleX, station.nozzleY, nozzleWorldZ);
+    _hoseStart.set(station.nozzleX, station.nozzleY, station.nozzleZ);
     this.heroRig.fuelPortTip.getWorldPosition(_fuelPortWorldPos);
 
     _hoseMid.addVectors(_hoseStart, _fuelPortWorldPos).multiplyScalar(0.5);
@@ -2057,13 +2611,37 @@ export class HeroRastarEngine {
     this.fuelHoseGroup.visible = true;
   }
 
-  private updateViolations(dt: number, speedKmh: number): void {
-    const fwdZ = -Math.cos(this.playerYaw);
-    const onRightArteryWrongWay =
-      this.playerX > 1.2 && this.playerX < GAME_CONFIG.ARTERY_HALF_WIDTH && fwdZ < -0.35 && speedKmh > 12;
-    const onSidewalk = this.world.isOnArterySidewalk(this.playerX, this.playerZ) && speedKmh > 8;
+  private updateViolations(dt: number, speedKmh: number, fwdX: number, fwdZ: number): void {
+    const onMetroWrongWay =
+      this.playerZ >= -1198 &&
+      Math.abs(this.playerZ - CORRIDOR_CONFIG.TEJGAON_TURNOFF_Z) > 18 &&
+      ((this.playerX > 1.2 && this.playerX < GAME_CONFIG.ARTERY_HALF_WIDTH && fwdZ < -0.35) ||
+        (this.playerX < -1.2 && this.playerX > -GAME_CONFIG.ARTERY_HALF_WIDTH && fwdZ > 0.35)) &&
+      speedKmh > 12;
 
-    if (onRightArteryWrongWay) {
+    const onSpineWrongWay =
+      this.playerZ <= -1070 &&
+      this.playerZ >= -3645 &&
+      Math.abs(this.playerZ - CORRIDOR_CONFIG.TEJGAON_TURNOFF_Z) > 18 &&
+      Math.abs(this.playerZ - CORRIDOR_CONFIG.KURIL_SPLIT_Z) > 22 &&
+      this.playerX >= CORRIDOR_CONFIG.SPINE_X - CORRIDOR_CONFIG.SPINE_HALF_WIDTH &&
+      this.playerX <= CORRIDOR_CONFIG.SPINE_X + CORRIDOR_CONFIG.SPINE_HALF_WIDTH &&
+      ((this.playerX > CORRIDOR_CONFIG.SPINE_X + 1.0 && fwdZ < -0.35) ||
+        (this.playerX < CORRIDOR_CONFIG.SPINE_X - 1.0 && fwdZ > 0.35)) &&
+      speedKmh > 14;
+
+    const on300ftWrongWay =
+      this.playerY < 1.5 &&
+      this.playerX > 220 &&
+      this.playerX < 2100 &&
+      Math.abs(this.playerZ - CORRIDOR_CONFIG.EXPRESSWAY_Z) < 18 &&
+      ((this.playerZ < CORRIDOR_CONFIG.EXPRESSWAY_Z - 4 && fwdX < -0.35) ||
+        (this.playerZ > CORRIDOR_CONFIG.EXPRESSWAY_Z + 4 && fwdX > 0.35)) &&
+      speedKmh > 14;
+
+    const onSidewalk = this.playerY < 0.8 && this.world.isOnArterySidewalk(this.playerX, this.playerZ) && speedKmh > 8;
+
+    if (onMetroWrongWay || onSpineWrongWay || on300ftWrongWay) {
       this.activeViolation = 'ভুল দিক! (+15/s নিয়ম ভঙ্গ বোনাস)';
       this.violationTimer = 0.6;
       this.violationPenaltyAccum += 15 * dt;
@@ -2131,19 +2709,27 @@ export class HeroRastarEngine {
         if (pk.respawnTimer <= 0) {
           const loc = this.samplePickupLocation(pk.id + Math.floor(Math.random() * 5));
           pk.x = loc.x;
+          pk.y = loc.y;
           pk.z = loc.z;
           pk.mesh.visible = true;
         }
         continue;
       }
 
+      // If rider moved into a different corridor far away, pull pickup ahead onto active route
+      if (Math.hypot(pk.x - this.playerX, pk.z - this.playerZ) > 360) {
+        const loc = this.samplePickupLocation(pk.id + Math.floor(Math.random() * 7));
+        pk.x = loc.x;
+        pk.y = loc.y;
+        pk.z = loc.z;
+      }
+
       pk.phase += dt * 3.2;
-      const relZ = wrapLoopDelta(pk.z, this.playerZ);
-      pk.mesh.position.set(pk.x, 0.92 + Math.sin(pk.phase) * 0.16, this.playerZ + relZ);
+      pk.mesh.position.set(pk.x, pk.y + 0.92 + Math.sin(pk.phase) * 0.16, pk.z);
       pk.mesh.rotation.y += dt * 2.8;
 
-      if (Math.abs(relZ) < 1.65 && Math.abs(this.playerX - pk.x) < 1.45) {
-        pk.respawnTimer = 8.0;
+      if (Math.abs(pk.z - this.playerZ) < 1.75 && Math.abs(this.playerX - pk.x) < 1.55 && Math.abs(this.playerY - pk.y) < 1.8) {
+        pk.respawnTimer = 7.5;
         pk.mesh.visible = false;
         this.collectiblesCount += 1;
         this.advanceMission('pickup', 1);
@@ -2154,39 +2740,331 @@ export class HeroRastarEngine {
           this.addPoints(pts);
           this.comboTimer = Math.max(this.comboTimer, bikeSpec.comboHoldSec);
           this.audio.playDing(this.combo);
-          this.spawnBurst(pk.x, 1.0, this.playerZ + relZ, 0xfacc15, 10);
+          this.spawnBurst(pk.x, pk.y + 1.0, pk.z, 0xfacc15, 10);
           this.pushPopup('৳ টাকা কয়েন!', `+${pts} pts${feverMult > 1 ? ' (FEVER 2x!)' : ''}`, 'bonus');
         } else if (pk.kind === 'fuel') {
           const fuelGain = bikeSpec.fuelCapacity * 0.18;
           this.fuelAmount = Math.min(bikeSpec.fuelCapacity, this.fuelAmount + fuelGain);
           this.audio.playTankFull();
           this.flashScreen('green', 0.18);
-          this.spawnBurst(pk.x, 1.0, this.playerZ + relZ, 0x22c55e, 10);
+          this.spawnBurst(pk.x, pk.y + 1.0, pk.z, 0x22c55e, 10);
           this.pushPopup('পেট্রোল ক্যান!', `+${Math.round(fuelGain)}L তেল (+18%)`, 'refuel');
         } else {
           this.freeNitroTimer = bikeSpec.nitroDurationSec;
           this.audio.playWhoosh();
           this.flashScreen('amber', 0.16);
-          this.spawnBurst(pk.x, 1.0, this.playerZ + relZ, 0x38bdf8, 12);
+          this.spawnBurst(pk.x, pk.y + 1.0, pk.z, 0x38bdf8, 12);
           this.pushPopup('নাইট্রো চার্জ!', `ফ্রি টার্বো বুস্ট (${bikeSpec.nitroDurationSec.toFixed(1)} সে.)`, 'bonus');
         }
       }
     }
   }
 
+  private advanceKurilRampMotion(t: TrafficEntity, step: number): void {
+    switch (t.kurilPhase) {
+      case 'eb_merge': {
+        const dx = 155.0 - t.x;
+        const dz = -2735.0 - t.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist <= Math.max(0.85, step)) {
+          t.x = 155.0;
+          t.z = -2735.0;
+          t.dirX = 0;
+          t.dirZ = -1;
+          t.yaw = 0;
+          t.kurilPhase = 'eb_ramp_up';
+        } else {
+          t.dirX = dx / dist;
+          t.dirZ = dz / dist;
+          t.yaw = Math.atan2(-t.dirX, -t.dirZ);
+          t.x += t.dirX * step;
+          t.z += t.dirZ * step;
+        }
+        return;
+      }
+      case 'eb_ramp_up': {
+        t.dirX = 0;
+        t.dirZ = -1;
+        t.yaw = 0;
+        t.x = 155.0;
+        t.z -= step;
+        if (t.z <= -2845.0) {
+          t.z = -2845.0;
+          t.arcAngle = Math.PI;
+          t.kurilPhase = 'eb_arc';
+        }
+        return;
+      }
+      case 'eb_arc': {
+        t.arcAngle -= step / 85.5;
+        if (t.arcAngle <= Math.PI / 2) {
+          t.x = 240.5;
+          t.z = -2930.5;
+          t.dirX = 1;
+          t.dirZ = 0;
+          t.yaw = -Math.PI / 2;
+          t.kurilPhase = 'eb_ramp_down';
+        } else {
+          t.x = 240.5 + 85.5 * Math.cos(t.arcAngle);
+          t.z = -2845.0 - 85.5 * Math.sin(t.arcAngle);
+          t.dirX = Math.sin(t.arcAngle);
+          t.dirZ = Math.cos(t.arcAngle);
+          t.yaw = Math.atan2(-t.dirX, -t.dirZ);
+        }
+        return;
+      }
+      case 'eb_ramp_down': {
+        t.dirX = 1;
+        t.dirZ = 0;
+        t.yaw = -Math.PI / 2;
+        t.z = -2930.5;
+        t.x += step;
+        if (t.x >= 425.5) {
+          t.kurilPhase = 'none';
+          t.turnCooldown = 3.5;
+        }
+        return;
+      }
+      case 'wb_ramp_up': {
+        t.dirX = -1;
+        t.dirZ = 0;
+        t.yaw = Math.PI / 2;
+        t.z = -2909.5;
+        t.x -= step;
+        if (t.x <= 230.0) {
+          t.x = 230.0;
+          t.arcAngle = -Math.PI / 2;
+          t.kurilPhase = 'wb_arc';
+        }
+        return;
+      }
+      case 'wb_arc': {
+        t.arcAngle -= step / 61.5;
+        if (t.arcAngle <= -Math.PI) {
+          t.x = 168.5;
+          t.z = -2848.0;
+          t.dirX = 0;
+          t.dirZ = 1;
+          t.yaw = Math.PI;
+          t.kurilPhase = 'wb_ramp_down';
+        } else {
+          t.x = 230.0 + 61.5 * Math.cos(t.arcAngle);
+          t.z = -2848.0 + 61.5 * Math.sin(t.arcAngle);
+          t.dirX = Math.sin(t.arcAngle);
+          t.dirZ = -Math.cos(t.arcAngle);
+          t.yaw = Math.atan2(-t.dirX, -t.dirZ);
+        }
+        return;
+      }
+      case 'wb_ramp_down': {
+        t.dirX = 0;
+        t.dirZ = 1;
+        t.yaw = Math.PI;
+        t.x = 168.5;
+        t.z += step;
+        if (t.z >= -2725.0) {
+          t.z = -2725.0;
+          t.kurilPhase = 'wb_merge';
+        }
+        return;
+      }
+      case 'wb_merge': {
+        const targetX = t.id % 2 === 0 ? 143.25 : 146.75;
+        const dx = targetX - t.x;
+        const dz = -2685.0 - t.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist <= Math.max(0.85, step)) {
+          t.x = targetX;
+          t.z = -2685.0;
+          t.dirX = 0;
+          t.dirZ = 1;
+          t.yaw = Math.PI;
+          t.kurilPhase = 'none';
+          t.turnCooldown = 3.5;
+        } else {
+          t.dirX = dx / dist;
+          t.dirZ = dz / dist;
+          t.yaw = Math.atan2(-t.dirX, -t.dirZ);
+          t.x += t.dirX * step;
+          t.z += t.dirZ * step;
+        }
+        return;
+      }
+    }
+  }
+
+  private steerTrafficThroughJunctions(t: TrafficEntity): void {
+    if (t.kurilPhase !== 'none' || t.turnCooldown > 0) return;
+
+    // 1. Metro Northbound -> Turn East onto Tejgaon Link Road Keep-Left Eastbound lane (z = -1124.5)
+    if (Math.abs(t.x) < 10 && t.dirZ < -0.5 && t.z <= -1118 && t.z >= -1127) {
+      if (t.id % 4 !== 0) {
+        t.x = Math.max(t.x, 1.5);
+        t.z = -1124.5;
+        t.yaw = -Math.PI / 2;
+        t.dirX = 1;
+        t.dirZ = 0;
+        t.turnCooldown = 3.5;
+        return;
+      }
+      t.turnCooldown = 1.6;
+      return;
+    }
+
+    // 2. Metro End U-Turn (z <= -1224 -> swing around onto Metro Southbound)
+    if (Math.abs(t.x) < 18 && t.dirZ < -0.5 && t.z <= -1224) {
+      t.x = t.id % 2 === 0 ? 3.25 : 6.75;
+      t.z = -1222;
+      t.yaw = Math.PI;
+      t.dirX = 0;
+      t.dirZ = 1;
+      t.turnCooldown = 3.5;
+      return;
+    }
+
+    // 3. Metro Southbound reaching Farmgate start -> loop back North onto Metro
+    if (Math.abs(t.x) < 12 && t.dirZ > 0.5 && t.z >= -14) {
+      t.x = t.id % 2 === 0 ? -3.25 : -6.75;
+      t.z = -18;
+      t.yaw = 0;
+      t.dirX = 0;
+      t.dirZ = -1;
+      t.turnCooldown = 3.5;
+      return;
+    }
+
+    // 4. Tejgaon Link Road Eastbound -> Merge onto Tejgaon Spine (80% North to Showroom/Mohakhali, 20% South to U-Turn)
+    if (t.dirX > 0.5 && Math.abs(t.z - CORRIDOR_CONFIG.TEJGAON_TURNOFF_Z) < 10 && t.x >= 133) {
+      if (t.id % 5 !== 0) {
+        t.x = t.id % 2 === 0 ? 133.25 : 136.75;
+        t.z = -1126;
+        t.yaw = 0;
+        t.dirX = 0;
+        t.dirZ = -1;
+      } else {
+        t.x = 143.25;
+        t.z = -1114;
+        t.yaw = Math.PI;
+        t.dirX = 0;
+        t.dirZ = 1;
+      }
+      t.turnCooldown = 3.5;
+      return;
+    }
+
+    // 5. Tejgaon Link Road Westbound -> Merge South onto Metro Rail road
+    if (t.dirX < -0.5 && Math.abs(t.z - CORRIDOR_CONFIG.TEJGAON_TURNOFF_Z) < 10 && t.x <= 6) {
+      t.x = t.id % 2 === 0 ? 3.25 : 6.75;
+      t.z = -1114;
+      t.yaw = Math.PI;
+      t.dirX = 0;
+      t.dirZ = 1;
+      t.turnCooldown = 3.5;
+      return;
+    }
+
+    // 6. Tejgaon South U-Turn Plaza -> Swing back North toward Tejgaon Showroom / Mohakhali
+    if (Math.abs(t.x - CORRIDOR_CONFIG.SPINE_X) < 18 && t.dirZ > 0.5 && t.z >= -1034) {
+      t.x = t.id % 2 === 0 ? 133.25 : 136.75;
+      t.z = -1036;
+      t.yaw = 0;
+      t.dirX = 0;
+      t.dirZ = -1;
+      t.turnCooldown = 3.5;
+      return;
+    }
+
+    // 7. Spine Southbound at Tejgaon Link -> 45% turn West into Tejgaon Link Road Keep-Left Westbound lane (z = -1115.5)
+    if (Math.abs(t.x - CORRIDOR_CONFIG.SPINE_X) < 18 && t.dirZ > 0.5 && t.z >= -1121 && t.z <= -1113) {
+      if (t.id % 2 === 0) {
+        t.x = 138;
+        t.z = -1115.5;
+        t.yaw = Math.PI / 2;
+        t.dirX = -1;
+        t.dirZ = 0;
+        t.turnCooldown = 3.5;
+        return;
+      }
+      t.turnCooldown = 1.6;
+      return;
+    }
+
+    // 8. Spine Northbound at Kuril Slip Entry (z = -2692..-2718):
+    //    - KURIL_RAMP_TO_300FT vehicles smoothly merge onto Upper East-side Flyover Ramp (x=155, z=-2735) -> 300ft!
+    //    - SPINE_TO_UTTARA vehicles stay strictly on straight North ground lanes (133.25/136.75) to Uttara!
+    if (Math.abs(t.x - CORRIDOR_CONFIG.SPINE_X) < 18 && t.dirZ < -0.5 && t.z <= -2692 && t.z >= -2718) {
+      if (t.routeTag === 'KURIL_RAMP_TO_300FT') {
+        t.kurilPhase = 'eb_merge';
+        return;
+      }
+      t.turnCooldown = 2.5;
+      return;
+    }
+
+    // 9. Uttara End U-Turn -> Swing South back toward Mohakhali
+    if (Math.abs(t.x - CORRIDOR_CONFIG.SPINE_X) < 18 && t.dirZ < -0.5 && t.z <= -3692) {
+      t.x = t.id % 2 === 0 ? 143.25 : 146.75;
+      t.z = -3688;
+      t.yaw = Math.PI;
+      t.dirX = 0;
+      t.dirZ = 1;
+      t.turnCooldown = 3.5;
+      return;
+    }
+
+    // 10. 300ft Eastbound at Purbachal U-Turn -> Loop onto 300ft Keep-Left Westbound South carriageway
+    if (t.dirX > 0.5 && t.x >= 2168) {
+      t.x = 2164;
+      t.z =
+        t.routeTag === 'KURIL_RAMP_TO_300FT'
+          ? -2909.5
+          : CORRIDOR_CONFIG.EXPRESSWAY_INBOUND_LANES_Z[t.id % 3];
+      t.yaw = Math.PI / 2;
+      t.dirX = -1;
+      t.dirZ = 0;
+      t.turnCooldown = 3.5;
+      return;
+    }
+
+    // 11. 300ft Westbound approaching Kuril Lower Return Flyover (x <= 395): climb Lower Flyover back to Mohakhali!
+    if (t.dirX < -0.5 && t.x <= 395 && t.x >= 375 && Math.abs(t.z - -2909.5) < 6.5) {
+      t.z = -2909.5;
+      t.kurilPhase = 'wb_ramp_up';
+      return;
+    }
+
+    // Ground-level Kuril 300ft Westbound (outer lanes) -> Merge South onto Banani/Mohakhali Spine
+    if (t.dirX < -0.5 && t.x <= 150) {
+      t.x = t.id % 2 === 0 ? 143.25 : 146.75;
+      t.z = -2904;
+      t.yaw = Math.PI;
+      t.dirX = 0;
+      t.dirZ = 1;
+      t.turnCooldown = 3.5;
+    }
+  }
+
   private updateTraffic(dt: number): void {
-    const loopLen = GAME_CONFIG.LOOP_LENGTH;
+    const nearMetro = Math.abs(this.playerX) < 160 && this.playerZ > CORRIDOR_CONFIG.METRO_EXT_MIN_Z - 260;
 
     for (const t of this.traffic) {
       if (t.hitCooldown > 0) t.hitCooldown -= dt;
+      if (t.turnCooldown > 0) t.turnCooldown = Math.max(0, t.turnCooldown - dt);
 
       if (t.wrecked) {
         t.wreckTimer -= dt;
-        t.rig.group.position.y = THREE.MathUtils.damp(t.rig.group.position.y, -2.5, 4, dt);
+        t.rig.group.position.y = THREE.MathUtils.damp(t.rig.group.position.y, t.y - 2.5, 4, dt);
         if (t.wreckTimer <= 0) {
           this.recycleVehicle(t);
         }
         continue;
+      }
+
+      if (t.isCityVehicle) {
+        t.rig.group.visible = nearMetro;
+        if (!nearMetro) continue;
+      } else {
+        t.rig.group.visible = true;
       }
 
       if (t.frozen) {
@@ -2194,7 +3072,6 @@ export class HeroRastarEngine {
         continue;
       }
 
-      // Periodic forward lookahead for car-following & obstacle braking
       t.lookaheadTimer -= dt;
       if (t.lookaheadTimer <= 0) {
         t.lookaheadTimer = 0.14;
@@ -2202,28 +3079,31 @@ export class HeroRastarEngine {
       }
 
       t.currentSpeed = THREE.MathUtils.damp(t.currentSpeed, t.targetSpeed, 6, dt);
-      t.x += t.dirX * t.currentSpeed * dt;
-      t.z += t.dirZ * t.currentSpeed * dt;
+      const step = t.currentSpeed * dt;
+
+      if (!t.isCityVehicle && t.kurilPhase !== 'none') {
+        this.advanceKurilRampMotion(t, step);
+      } else {
+        t.x += t.dirX * step;
+        t.z += t.dirZ * step;
+      }
 
       const wheelSpin = (t.currentSpeed / 0.35) * dt;
       for (const w of t.rig.wheels) w.rotation.x -= wheelSpin;
 
       if (!t.isCityVehicle) {
-        const dz = t.z - this.playerZ;
-        if (dz < -250 || dz > 170) {
+        this.steerTrafficThroughJunctions(t);
+        const distToPlayer = Math.hypot(t.x - this.playerX, t.z - this.playerZ);
+        if (distToPlayer > 320) {
           this.recycleVehicle(t);
           continue;
         }
-        if (Math.abs(dz) > 36) t.nearMissedThisPass = false;
+        if (distToPlayer > 40) t.nearMissedThisPass = false;
       } else {
         const lane = this.world.cityLanes[t.laneIdx];
         if (lane.axis === 'NS') {
-          if (t.z < -loopLen) t.z += loopLen;
-          if (t.z > 0) t.z -= loopLen;
-          if (Math.abs(wrapLoopDelta(t.z, this.playerZ)) > 230) {
-            this.recycleVehicle(t);
-            continue;
-          }
+          if (t.z < -GAME_CONFIG.LOOP_LENGTH) t.z += GAME_CONFIG.LOOP_LENGTH;
+          if (t.z > 0) t.z -= GAME_CONFIG.LOOP_LENGTH;
         } else {
           if (t.x < lane.minRange || t.x > lane.maxRange) {
             const entryX = t.dirX > 0 ? lane.minRange + 1 : lane.maxRange - 1;
@@ -2235,11 +3115,15 @@ export class HeroRastarEngine {
         }
       }
 
-      t.rig.group.position.set(
-        t.x,
-        0,
-        t.isCityVehicle ? this.playerZ + wrapLoopDelta(t.z, this.playerZ) : t.z
-      );
+      const surf = sampleDhakaSurface(t.x, t.z, t.y, t.dirX, t.dirZ);
+      t.y = surf.groundY;
+      t.rig.group.position.set(t.x, t.y, t.z);
+      t.rig.group.rotation.x = surf.pitchRad;
+      t.rig.group.rotation.z = 0;
+      let yawDiff = t.yaw - t.rig.group.rotation.y;
+      while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
+      while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
+      t.rig.group.rotation.y += yawDiff * Math.min(1, dt * 12);
     }
   }
 
@@ -2248,22 +3132,24 @@ export class HeroRastarEngine {
     const spec = VEHICLE_SPECS[t.kind];
     const stopGap = spec.halfLength * 0.58 + 5.5;
 
-    // 1. Slow/yield if player is directly ahead in travel path
-    const pdx = this.playerX - t.x;
-    const pdz = wrapLoopDelta(this.playerZ, t.z);
-    const pAlong = pdx * t.dirX + pdz * t.dirZ;
-    const pLateral = Math.abs(pdx * t.dirZ - pdz * t.dirX);
-    if (pAlong > 0.5 && pAlong < stopGap + 3.5 && pLateral < spec.halfWidth * 0.58 + 1.0) {
-      target = Math.min(target, 2.5);
+    // 1. Slow/yield if player is directly ahead on same level
+    if (Math.abs(this.playerY - t.y) < 1.8) {
+      const pdx = this.playerX - t.x;
+      const pdz = this.playerZ - t.z;
+      const pAlong = pdx * t.dirX + pdz * t.dirZ;
+      const pLateral = Math.abs(pdx * t.dirZ - pdz * t.dirX);
+      if (pAlong > 0.5 && pAlong < stopGap + 3.5 && pLateral < spec.halfWidth * 0.58 + 1.0) {
+        target = Math.min(target, 2.5);
+      }
     }
 
     // 2. Car-following in lane + perpendicular junction yield
     for (const other of this.traffic) {
-      if (other.id === t.id || other.wrecked) continue;
+      if (other.id === t.id || other.wrecked || Math.abs(other.y - t.y) > 1.8) continue;
       const otherSpec = VEHICLE_SPECS[other.kind];
       const combinedHalf = (spec.halfLength + otherSpec.halfLength) * 0.58;
       const odx = other.x - t.x;
-      const odz = wrapLoopDelta(other.z, t.z);
+      const odz = other.z - t.z;
       const along = odx * t.dirX + odz * t.dirZ;
       const lat = Math.abs(odx * t.dirZ - odz * t.dirX);
       const dirDot = t.dirX * other.dirX + t.dirZ * other.dirZ;
@@ -2276,7 +3162,6 @@ export class HeroRastarEngine {
           target = Math.min(target, other.currentSpeed * 0.88);
         }
       } else if (Math.abs(dirDot) < 0.45) {
-        // Perpendicular cross-traffic inside junction: never ghost through crossing vehicles!
         const crossWidth = otherSpec.halfLength * 0.58 + spec.halfWidth * 0.58 + 1.2;
         if (along > 0.4 && along < combinedHalf + 7.5 && lat < crossWidth) {
           return 0;
@@ -2285,33 +3170,35 @@ export class HeroRastarEngine {
     }
 
     // 3. Stop for pedestrian directly ahead
-    for (const p of this.pedestrians) {
-      if (p.mode === 'knocked') continue;
-      const dx = p.x - t.x;
-      const dz = wrapLoopDelta(p.z, t.z);
-      const along = dx * t.dirX + dz * t.dirZ;
-      const lat = Math.abs(dx * t.dirZ - dz * t.dirX);
-      if (along > 0.4 && along < stopGap + 2.5 && lat < 1.35) {
-        return 0;
+    if (t.y < 1.2) {
+      for (const p of this.pedestrians) {
+        if (p.mode === 'knocked') continue;
+        const dx = p.x - t.x;
+        const dz = p.z - t.z;
+        const along = dx * t.dirX + dz * t.dirZ;
+        const lat = Math.abs(dx * t.dirZ - dz * t.dirX);
+        if (along > 0.4 && along < stopGap + 2.5 && lat < 1.35) {
+          return 0;
+        }
       }
     }
 
-    // 4a. All N-S Traffic (Main Artery + N-S Side Avenues) obeys nsPhase stop lines behind crosswalks
-    if (Math.abs(t.dirZ) > 0.5) {
+    // 4a. All N-S Traffic obeys nsPhase stop lines behind crosswalks
+    if (Math.abs(t.dirZ) > 0.5 && t.y < 1.2) {
       for (const inter of this.world.intersections) {
+        if (Math.abs(t.x - inter.baseX) > 70) continue;
         if (inter.nsPhase !== 'RED' && inter.nsPhase !== 'YELLOW') continue;
         const stopLineZ = inter.baseZ + (t.dirZ < 0 ? 11.8 : -11.8);
-        const dz = wrapLoopDelta(stopLineZ, t.z) * t.dirZ;
+        const dz = (stopLineZ - t.z) * t.dirZ;
         if (dz > -0.6 && dz < 16.5) {
           return 0;
         }
       }
     } else if (t.isCityVehicle && Math.abs(t.dirX) > 0.5) {
-      // 4b. E-W Cross-Street & Goli Traffic
       const lane = this.world.cityLanes[t.laneIdx];
       if (lane?.isSignalizedEw) {
         for (const inter of this.world.intersections) {
-          if (Math.abs(wrapLoopDelta(inter.baseZ, t.z)) > 8) continue;
+          if (inter.baseX !== 0 || Math.abs(inter.baseZ - t.z) > 8) continue;
           if (inter.ewPhase !== 'RED' && inter.ewPhase !== 'YELLOW') continue;
           const stopLineX = t.dirX > 0 ? -13.2 : 13.2;
           const dx = (stopLineX - t.x) * t.dirX;
@@ -2320,16 +3207,15 @@ export class HeroRastarEngine {
           }
         }
       } else {
-        // Unsignalized Goli connector: look both ways before crossing the main artery!
         const stopLineX = t.dirX > 0 ? -13.0 : 13.0;
         const dx = (stopLineX - t.x) * t.dirX;
         if (dx > -0.4 && dx < 10.0) {
-          if (Math.abs(this.playerX) < 11.5 && Math.abs(wrapLoopDelta(this.playerZ, t.z)) < 26) {
+          if (Math.abs(this.playerX) < 11.5 && Math.abs(this.playerZ - t.z) < 26) {
             return 0;
           }
           for (const other of this.traffic) {
             if (other.id === t.id || other.wrecked || other.isCityVehicle) continue;
-            if (Math.abs(wrapLoopDelta(other.z, t.z)) < 22 && other.currentSpeed > 1.8) {
+            if (Math.abs(other.x) < 12 && Math.abs(other.z - t.z) < 22 && other.currentSpeed > 1.8) {
               return 0;
             }
           }
@@ -2343,20 +3229,8 @@ export class HeroRastarEngine {
   private recycleVehicle(t: TrafficEntity): void {
     const tier = this.getActiveBikeSpec().tier;
     if (!t.isCityVehicle) {
-      const kind = pickWeightedKind(false, tier);
-      const laneIdx = pickArteryLaneForKind(kind);
-      const laneX = GAME_CONFIG.ARTERY_LANES[laneIdx];
-      const yaw = laneX > 0 ? Math.PI : 0;
-      const spawnOffset = laneX > 0 ? -(115 + Math.random() * 75) : -(125 + Math.random() * 90);
-      let newZ = this.playerZ + spawnOffset;
-      if (newZ <= -GAME_CONFIG.LOOP_LENGTH) newZ += GAME_CONFIG.LOOP_LENGTH;
-      if (newZ > 0) newZ -= GAME_CONFIG.LOOP_LENGTH;
-
-      // Density cap: never let the road fill with Titans (smashRank 3).
-      // At tier 3 the weighted picker loves them, so enforce a hard ceiling
-      // and fall back to a lower-rank kind instead of recycling into another.
-      let chosenKind = kind;
-      if (tier === 3 && VEHICLE_SPECS[kind].smashRank >= 3) {
+      let chosenKind = pickWeightedKind(false, tier);
+      if (tier === 3 && VEHICLE_SPECS[chosenKind].smashRank >= 3) {
         const activeTitans = this.traffic.filter(
           (o) => !o.isCityVehicle && !o.wrecked && VEHICLE_SPECS[o.kind].smashRank >= 3
         ).length;
@@ -2365,14 +3239,160 @@ export class HeroRastarEngine {
         }
       }
 
-      // Spacing check
-      for (const other of this.traffic) {
-        if (other.id !== t.id && !other.isCityVehicle && other.laneIdx === laneIdx) {
-          if (Math.abs(wrapLoopDelta(other.z, newZ)) < 14) {
-            newZ -= 18;
+      const fwdX = -Math.sin(this.playerYaw);
+      const fwdZ = -Math.cos(this.playerYaw);
+
+      // Recycle onto player's active highway corridor (300ft / Tejgaon Link / Spine / Metro)
+      t.kurilPhase = 'none';
+      t.arcAngle = 0;
+
+      if (this.playerX > 165) {
+        // 300 Feet 6-Lane Purbachal Expressway (Keep-Left + Westbound Kuril Lower Flyover climbers)
+        t.routeTag = t.id % 3 === 0 ? 'KURIL_RAMP_TO_300FT' : 'EXPRESSWAY_300FT';
+        const goEast = Math.random() < (fwdX >= 0 ? 0.58 : 0.42);
+        const lanesZ = goEast
+          ? CORRIDOR_CONFIG.EXPRESSWAY_OUTBOUND_LANES_Z
+          : CORRIDOR_CONFIG.EXPRESSWAY_INBOUND_LANES_Z;
+        const laneZ =
+          t.routeTag === 'KURIL_RAMP_TO_300FT'
+            ? goEast
+              ? -2930.5
+              : -2909.5
+            : lanesZ[Math.floor(Math.random() * lanesZ.length)];
+        const yaw = goEast ? -Math.PI / 2 : Math.PI / 2;
+        const aheadSign = fwdX >= 0 ? 1 : -1;
+        // Keep ground spawns east of flyover ramp touchdowns (x >= 435) on middle lanes (-2930.5/-2909.5)
+        const minGroundX = laneZ === -2930.5 || laneZ === -2909.5 ? 435 : 225;
+        let newX = THREE.MathUtils.clamp(
+          this.playerX + aheadSign * (100 + Math.random() * 115),
+          minGroundX,
+          CORRIDOR_CONFIG.PURBACHAL_UTURN_X - 20
+        );
+        for (const other of this.traffic) {
+          if (other.id !== t.id && !other.isCityVehicle && Math.abs(other.z - laneZ) < 1.5 && Math.abs(other.x - newX) < 14) {
+            newX += aheadSign * 18;
           }
         }
+        newX = THREE.MathUtils.clamp(newX, minGroundX, CORRIDOR_CONFIG.PURBACHAL_UTURN_X - 20);
+        this.spawnTrafficSlot(t, chosenKind, laneZ, newX, yaw);
+        return;
       }
+
+      if (
+        this.playerX >= 12 &&
+        this.playerX < 126 &&
+        Math.abs(this.playerZ - CORRIDOR_CONFIG.TEJGAON_TURNOFF_Z) < 65
+      ) {
+        // Tejgaon Link Road (x = 0..140, z = -1120) — Keep-Left: Eastbound North (-1124.5), Westbound South (-1115.5)
+        t.routeTag = 'METRO_LOCAL';
+        if (Math.random() < 0.58) {
+          const goEast = Math.random() < (fwdX >= 0 ? 0.65 : 0.35);
+          const laneZ = goEast ? -1124.5 : -1115.5;
+          const yaw = goEast ? -Math.PI / 2 : Math.PI / 2;
+          const newX = goEast ? 10 + Math.random() * 60 : 80 + Math.random() * 52;
+          this.spawnTrafficSlot(t, chosenKind, laneZ, newX, yaw);
+        } else {
+          const laneIdx = pickArteryLaneForKind(chosenKind);
+          const laneX = CORRIDOR_CONFIG.SPINE_LANES[laneIdx];
+          const yaw = laneX > CORRIDOR_CONFIG.SPINE_X ? Math.PI : 0;
+          const newZ = -1045 - Math.random() * 240;
+          t.laneIdx = laneIdx;
+          this.spawnTrafficSlot(t, chosenKind, newZ, laneX, yaw);
+        }
+        return;
+      }
+
+      if (this.playerX >= 100 && this.playerX <= 165) {
+        // Tejgaon -> Mohakhali -> Banani -> Kuril -> Uttara Spine
+        if (this.playerZ > -1260 && Math.random() < 0.25) {
+          t.routeTag = 'METRO_LOCAL';
+          const newX = 28 + Math.random() * 90;
+          this.spawnTrafficSlot(t, chosenKind, -1124.5, newX, -Math.PI / 2);
+          return;
+        }
+
+        // Strict conflict-free split around Banani/Kuril: half SPINE_TO_UTTARA (straight), half KURIL_RAMP_TO_300FT (Upper flyover ramp)
+        t.routeTag =
+          this.playerZ < -2960
+            ? 'SPINE_TO_UTTARA'
+            : t.id % 2 === 0
+              ? 'SPINE_TO_UTTARA'
+              : 'KURIL_RAMP_TO_300FT';
+
+        if (t.routeTag === 'KURIL_RAMP_TO_300FT' && this.playerZ < -2480 && this.playerZ > -2960) {
+          // Spawn along Banani approach -> Kuril Ramp -> Upper 300ft Skyway
+          if (Math.random() < 0.55) {
+            const newZ = -2560 - Math.random() * 130;
+            t.laneIdx = 1;
+            this.spawnTrafficSlot(t, chosenKind, newZ, 136.75, 0);
+          } else {
+            const angle = Math.PI * (0.62 + Math.random() * 0.34);
+            const newX = 240.5 + 85.5 * Math.cos(angle);
+            const newZ = -2845.0 - 85.5 * Math.sin(angle);
+            const yaw = Math.atan2(-Math.sin(angle), -Math.cos(angle));
+            t.kurilPhase = 'eb_arc';
+            t.arcAngle = angle;
+            this.spawnTrafficSlot(t, chosenKind, newZ, newX, yaw);
+            t.y = 10.6;
+          }
+          return;
+        }
+
+        const laneIdx = pickArteryLaneForKind(chosenKind);
+        const laneX = CORRIDOR_CONFIG.SPINE_LANES[laneIdx];
+        const yaw = laneX > CORRIDOR_CONFIG.SPINE_X ? Math.PI : 0;
+        const aheadSign = fwdZ <= 0 ? -1 : 1;
+        let newZ = THREE.MathUtils.clamp(
+          this.playerZ + aheadSign * (100 + Math.random() * 110),
+          CORRIDOR_CONFIG.SPINE_MIN_Z + 55,
+          CORRIDOR_CONFIG.SPINE_MAX_Z - 25
+        );
+        // Never spawn non-ramp vehicles inside the Kuril slip merge zone on East lanes
+        if (t.routeTag === 'KURIL_RAMP_TO_300FT' && newZ < -2740 && yaw === 0) {
+          newZ = -2660;
+        }
+        for (const other of this.traffic) {
+          if (other.id !== t.id && !other.isCityVehicle && Math.abs(other.x - laneX) < 1.5 && Math.abs(other.z - newZ) < 14) {
+            newZ += aheadSign * 18;
+          }
+        }
+        newZ = THREE.MathUtils.clamp(newZ, CORRIDOR_CONFIG.SPINE_MIN_Z + 55, CORRIDOR_CONFIG.SPINE_MAX_Z - 25);
+        t.laneIdx = laneIdx;
+        this.spawnTrafficSlot(t, chosenKind, newZ, laneX, yaw);
+        return;
+      }
+
+      // Metro Corridor (0 .. -1220) + Tejgaon turnoff stream when player is past -880
+      t.routeTag = 'METRO_LOCAL';
+      if (this.playerZ < -880 && Math.random() < 0.45) {
+        if (Math.random() < 0.5) {
+          const newX = 12 + Math.random() * 100;
+          this.spawnTrafficSlot(t, chosenKind, -1124.5, newX, -Math.PI / 2);
+        } else {
+          const laneIdx = Math.random() < 0.5 ? 0 : 1;
+          const laneX = GAME_CONFIG.ARTERY_LANES[laneIdx];
+          const newZ = -940 - Math.random() * 168;
+          t.laneIdx = laneIdx;
+          this.spawnTrafficSlot(t, chosenKind, newZ, laneX, 0);
+        }
+        return;
+      }
+
+      const laneIdx = pickArteryLaneForKind(chosenKind);
+      const laneX = GAME_CONFIG.ARTERY_LANES[laneIdx];
+      const yaw = laneX > 0 ? Math.PI : 0;
+      const aheadSign = fwdZ <= 0 ? -1 : 1;
+      let newZ = THREE.MathUtils.clamp(
+        this.playerZ + aheadSign * (100 + Math.random() * 110),
+        -1215,
+        -20
+      );
+      for (const other of this.traffic) {
+        if (other.id !== t.id && !other.isCityVehicle && Math.abs(other.x - laneX) < 1.5 && Math.abs(other.z - newZ) < 14) {
+          newZ += aheadSign * 18;
+        }
+      }
+      newZ = THREE.MathUtils.clamp(newZ, -1215, -20);
       t.laneIdx = laneIdx;
       this.spawnTrafficSlot(t, chosenKind, newZ, laneX, yaw);
     } else {
@@ -2395,10 +3415,11 @@ export class HeroRastarEngine {
         p.rig.group.position.y = Math.max(0.05, p.rig.group.position.y + p.knockVy * dt);
         p.knockVy -= 20 * dt;
         p.rig.group.rotation.x = Math.PI * 0.45;
-        p.rig.group.position.set(p.x, p.rig.group.position.y, this.playerZ + wrapLoopDelta(p.z, this.playerZ));
+        p.rig.group.position.set(p.x, p.rig.group.position.y, p.z);
         if (p.knockTimer <= 0) {
           p.mode = p.isCrosswalk ? 'crossing' : 'sidewalk';
           p.x = p.homeX;
+          p.z = p.baseZ;
           p.rig.group.rotation.set(0, 0, 0);
           p.rig.angryBadge.visible = false;
         }
@@ -2411,7 +3432,7 @@ export class HeroRastarEngine {
       ) {
         p.angerTimer -= dt;
         const dx = this.playerX - p.x;
-        const dz = wrapLoopDelta(this.playerZ, p.z);
+        const dz = this.playerZ - p.z;
         const dist = Math.hypot(dx, dz);
         if (dist > 0.9) {
           const chaseSpd = this.gameState === GameState.CRASHED ? 7.8 : 5.2;
@@ -2427,18 +3448,26 @@ export class HeroRastarEngine {
           p.rig.angryBadge.visible = false;
         }
       } else {
-        // Check if fleeing from fast player nearby
+        // Cull animation updates for far-away pedestrians
+        if (Math.hypot(p.x - this.playerX, p.z - this.playerZ) > 180) {
+          p.rig.group.visible = false;
+          continue;
+        }
+        p.rig.group.visible = true;
+
         const pdx = p.x - this.playerX;
-        const pdz = wrapLoopDelta(p.z, this.playerZ);
+        const pdz = p.z - this.playerZ;
         const pDist = Math.hypot(pdx, pdz);
-        if (pDist < 7.5 && Math.abs(this.forwardSpeed) > 12 && !p.isCrosswalk) {
+        if (pDist < 7.5 && Math.abs(this.forwardSpeed) > 12 && !p.isCrosswalk && this.playerY < 1.2) {
           p.mode = 'fleeing';
           const awayX = pdx >= 0 ? 1 : -1;
           p.x += awayX * 4.0 * dt;
           p.walkPhase += dt * 12;
         } else if (p.isCrosswalk) {
           p.mode = 'crossing';
-          const inter = this.world.intersections.find((node) => Math.abs(wrapLoopDelta(node.baseZ, p.baseZ)) < 12);
+          const inter = this.world.intersections.find(
+            (node) => node.baseX === 0 && Math.abs(node.baseZ - p.baseZ) < 12
+          );
           const canWalk = !inter || inter.nsPhase !== 'GREEN' || Math.abs(p.x) < 9.9;
           p.rig.group.rotation.y = p.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
           if (canWalk) {
@@ -2451,9 +3480,16 @@ export class HeroRastarEngine {
           }
         } else {
           p.mode = 'sidewalk';
-          p.z += p.dir * p.walkSpeed * dt;
-          if (Math.abs(wrapLoopDelta(p.z, p.baseZ)) > 16) p.dir *= -1;
-          p.rig.group.rotation.y = p.dir > 0 ? 0 : Math.PI;
+          if (p.homeX > 200) {
+            // 300ft Neela Market sidewalk walkers patrol along X
+            p.x += p.dir * p.walkSpeed * dt;
+            if (Math.abs(p.x - p.homeX) > 16) p.dir *= -1;
+            p.rig.group.rotation.y = p.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+          } else {
+            p.z += p.dir * p.walkSpeed * dt;
+            if (Math.abs(p.z - p.baseZ) > 16) p.dir *= -1;
+            p.rig.group.rotation.y = p.dir > 0 ? 0 : Math.PI;
+          }
           p.walkPhase += dt * p.walkSpeed * 3.8;
         }
       }
@@ -2464,13 +3500,13 @@ export class HeroRastarEngine {
       p.rig.leftArm.rotation.x = -swing * 0.7;
       p.rig.rightArm.rotation.x = swing * 0.7;
 
-      const relZ = wrapLoopDelta(p.z, this.playerZ);
       const groundY = p.isCrosswalk || Math.abs(p.x) < 9.6 ? 0.02 : 0.14;
-      p.rig.group.position.set(p.x, groundY, this.playerZ + relZ);
+      p.rig.group.position.set(p.x, groundY, p.z);
     }
   }
 
   private angerNearbyWitnesses(originX: number, originZ: number): void {
+    if (this.playerY > 1.2) return;
     let activeChasers = 0;
     for (const p of this.pedestrians) {
       if (p.mode === 'chasing') activeChasers += 1;
@@ -2480,7 +3516,7 @@ export class HeroRastarEngine {
     let angered = 0;
     for (const p of this.pedestrians) {
       if (p.mode === 'knocked' || p.mode === 'chasing') continue;
-      const dist = Math.hypot(p.x - originX, wrapLoopDelta(p.z, originZ));
+      const dist = Math.hypot(p.x - originX, p.z - originZ);
       if (dist < 22 && angered < 2 && activeChasers + angered < 4) {
         p.mode = 'chasing';
         p.angerTimer = 8.5;
@@ -2499,15 +3535,18 @@ export class HeroRastarEngine {
     const bikeSpec = this.getActiveBikeSpec();
 
     for (const t of this.traffic) {
-      if (t.wrecked || t.hitCooldown > 0) continue;
+      if (t.wrecked || t.hitCooldown > 0 || !t.rig.group.visible) continue;
+      if (Math.abs(this.playerY - t.y) > 1.85) continue;
 
       const spec = VEHICLE_SPECS[t.kind];
       const scale = 0.58;
-      const tHalfW = (Math.abs(t.dirZ) > 0.5 ? spec.halfWidth : spec.halfLength) * scale;
-      const tHalfL = (Math.abs(t.dirZ) > 0.5 ? spec.halfLength : spec.halfWidth) * scale;
+      const absDirX = Math.abs(t.dirX);
+      const absDirZ = Math.abs(t.dirZ);
+      const tHalfW = (spec.halfWidth * absDirZ + spec.halfLength * absDirX) * scale;
+      const tHalfL = (spec.halfLength * absDirZ + spec.halfWidth * absDirX) * scale;
 
       const dx = Math.abs(this.playerX - t.x);
-      const dz = Math.abs(wrapLoopDelta(t.z, this.playerZ));
+      const dz = Math.abs(this.playerZ - t.z);
 
       if (dx < bikeHalfW + tHalfW && dz < bikeHalfL + tHalfL) {
         t.hitCooldown = 0.45;
@@ -2536,11 +3575,10 @@ export class HeroRastarEngine {
             this.audio.playThud();
           }
         } else {
-          // Smashable vehicle (scales with equipped Hero Bike tier!)
           if (Math.abs(this.forwardSpeed) > 4.5 || isBoosting) {
             t.wrecked = true;
             t.wreckTimer = 0.35;
-            t.rig.group.position.y = -2.5;
+            t.rig.group.position.y = t.y - 2.5;
 
             this.wrecksCount += 1;
             this.advanceMission('smash', spec.smashRank >= 2 ? 2 : 1);
@@ -2550,7 +3588,6 @@ export class HeroRastarEngine {
             this.combo = Math.min(10, this.combo + 1);
             this.comboTimer = bikeSpec.comboHoldSec;
 
-            // Preserve roaring speed through wreckage!
             this.forwardSpeed = Math.max(8, this.forwardSpeed * 0.9);
             this.lateralSlip = 0;
             this.postHitRecoveryTimer = 0.65;
@@ -2561,8 +3598,8 @@ export class HeroRastarEngine {
               this.audio.playAccidentAnnouncement();
             }
             this.flashScreen('amber', 0.16);
-            this.spawnBurst(t.x, 0.7, t.z, 0xf97316, spec.smashRank >= 2 ? 20 : 14);
-            this.spawnDebrisBurst(t.x, 0.5, t.z, spec.smashRank >= 2 ? 10 : 6);
+            this.spawnBurst(t.x, t.y + 0.7, t.z, 0xf97316, spec.smashRank >= 2 ? 20 : 14);
+            this.spawnDebrisBurst(t.x, t.y + 0.5, t.z, spec.smashRank >= 2 ? 10 : 6);
 
             if (t.kind === 'oil_tanker') {
               const tankBoost = bikeSpec.fuelCapacity * 0.2;
@@ -2582,7 +3619,7 @@ export class HeroRastarEngine {
       } else if (
         !t.nearMissedThisPass &&
         speedKmh >= 45 &&
-        dz < bikeHalfL + tHalfL + 0.4 &&
+        dz < bikeHalfL + tHalfL + 0.45 &&
         dx < bikeHalfW + tHalfW + 1.45
       ) {
         t.nearMissedThisPass = true;
@@ -2599,6 +3636,7 @@ export class HeroRastarEngine {
   }
 
   private checkPedestrianInteractions(isBoosting: boolean): void {
+    if (this.playerY > 1.2) return;
     const absSpd = Math.abs(this.forwardSpeed);
     const isMovingFastEnoughToRam = absSpd > 3.0 || isBoosting;
     const bikeSpec = this.getActiveBikeSpec();
@@ -2606,12 +3644,11 @@ export class HeroRastarEngine {
     for (const p of this.pedestrians) {
       if (p.mode === 'knocked') continue;
       const dx = this.playerX - p.x;
-      const dz = wrapLoopDelta(this.playerZ, p.z);
+      const dz = this.playerZ - p.z;
       const dist = Math.hypot(dx, dz);
 
       const catchRadius = p.mode === 'chasing' && !isMovingFastEnoughToRam ? 0.96 : 0.95;
       if (dist < catchRadius) {
-        // ONLY beat/kill the player if they stopped/slowed down outside refuel grace and an angry mob member catches them!
         if (p.mode === 'chasing' && !isMovingFastEnoughToRam && this.refuelSafeGraceTimer <= 0) {
           this.triggerBigCrash(
             'দাঁড়িয়ে যাওয়ায় ক্ষিপ্ত জনতা ধরে পিটিয়েছে!',
@@ -2620,7 +3657,6 @@ export class HeroRastarEngine {
           return;
         }
 
-        // Running over ANY pedestrian at speed knocks them down cleanly — keep riding & hitting!
         if (absSpd > 2.2 || isBoosting) {
           const wasChasing = p.mode === 'chasing';
           p.mode = 'knocked';
@@ -2637,7 +3673,7 @@ export class HeroRastarEngine {
           this.comboTimer = bikeSpec.comboHoldSec;
           this.audio.playPedHit();
           this.flashScreen('red', 0.14);
-          this.spawnBurst(p.x, 0.9, this.playerZ, 0xef4444, 8);
+          this.spawnBurst(p.x, 0.9, p.z, 0xef4444, 8);
           this.pushPopup(
             wasChasing ? 'ক্ষিপ্ত পাবলিক উড়ে গেল!' : 'পথচারী নকআউট!',
             `+${pts} pts • জোরে চালাও, থামলেই মাইর!`,
@@ -2650,16 +3686,18 @@ export class HeroRastarEngine {
   }
 
   private checkIntersections(speedKmh: number): void {
+    if (this.playerY > 1.2) return;
     const bikeSpec = this.getActiveBikeSpec();
     for (const inter of this.world.intersections) {
-      const relZ = wrapLoopDelta(inter.baseZ, this.playerZ);
-      if (Math.abs(relZ) > 30) {
+      const relX = Math.abs(this.playerX - inter.baseX);
+      const relZ = Math.abs(inter.baseZ - this.playerZ);
+      if (relX > 25 || relZ > 30) {
         inter.violatedThisPass = false;
         inter.bonusAwardedThisPass = false;
         continue;
       }
 
-      if (Math.abs(this.playerX) < GAME_CONFIG.ARTERY_HALF_WIDTH && Math.abs(relZ) < 2.8 && speedKmh > 18) {
+      if (relX < GAME_CONFIG.ARTERY_HALF_WIDTH + 1.2 && relZ < 2.8 && speedKmh > 18) {
         if (inter.nsPhase === 'RED' && !inter.violatedThisPass) {
           inter.violatedThisPass = true;
           this.ruleBreakCount += 1;
@@ -2686,11 +3724,15 @@ export class HeroRastarEngine {
   }
 
   private getActiveFuelStation(): FuelStationNode | null {
+    if (this.playerY > 1.2) return null;
     for (const fs of this.world.fuelStations) {
-      if (this.playerX >= fs.padMinX && this.playerX <= fs.padMaxX) {
-        if (Math.abs(wrapLoopDelta(fs.baseZ, this.playerZ)) <= GAME_CONFIG.FUEL_PAD_HALF_LENGTH) {
-          return fs;
-        }
+      if (
+        this.playerX >= fs.padMinX &&
+        this.playerX <= fs.padMaxX &&
+        this.playerZ >= fs.padMinZ &&
+        this.playerZ <= fs.padMaxZ
+      ) {
+        return fs;
       }
     }
     return null;
@@ -2700,7 +3742,7 @@ export class HeroRastarEngine {
     let best = 9999;
     for (const fs of this.world.fuelStations) {
       const dx = this.playerX - (fs.padMinX + fs.padMaxX) * 0.5;
-      const dz = wrapLoopDelta(fs.baseZ, this.playerZ);
+      const dz = this.playerZ - (fs.padMinZ + fs.padMaxZ) * 0.5;
       const d = Math.hypot(dx, dz);
       if (d < best) best = d;
     }
@@ -2708,11 +3750,15 @@ export class HeroRastarEngine {
   }
 
   private getActiveShowroom(): ShowroomNode | null {
+    if (this.playerY > 1.2) return null;
     for (const sr of this.world.showrooms) {
-      if (this.playerX >= sr.padMinX && this.playerX <= sr.padMaxX) {
-        if (Math.abs(wrapLoopDelta(sr.baseZ, this.playerZ)) <= GAME_CONFIG.SHOWROOM_PAD_HALF_LENGTH) {
-          return sr;
-        }
+      if (
+        this.playerX >= sr.padMinX &&
+        this.playerX <= sr.padMaxX &&
+        this.playerZ >= sr.padMinZ &&
+        this.playerZ <= sr.padMaxZ
+      ) {
+        return sr;
       }
     }
     return null;
@@ -2722,23 +3768,36 @@ export class HeroRastarEngine {
     let best = 9999;
     for (const sr of this.world.showrooms) {
       const dx = this.playerX - (sr.padMinX + sr.padMaxX) * 0.5;
-      const dz = wrapLoopDelta(sr.baseZ, this.playerZ);
+      const dz = this.playerZ - (sr.padMinZ + sr.padMaxZ) * 0.5;
       const d = Math.hypot(dx, dz);
       if (d < best) best = d;
     }
     return Math.round(best);
   }
 
-  private getUpcomingLight(): { phase: 'GREEN' | 'YELLOW' | 'RED' | null; meters: number } {
-    if (Math.abs(this.playerX) > GAME_CONFIG.ARTERY_HALF_WIDTH + 3) {
-      return { phase: null, meters: 0 };
+  private getActiveRestRoom(): RestRoomNode | null {
+    if (this.playerY > 1.2) return null;
+    for (const rr of this.world.restRooms) {
+      if (
+        this.playerX >= rr.minX &&
+        this.playerX <= rr.maxX &&
+        this.playerZ >= rr.minZ &&
+        this.playerZ <= rr.maxZ
+      ) {
+        return rr;
+      }
     }
+    return null;
+  }
+
+  private getUpcomingLight(): { phase: 'GREEN' | 'YELLOW' | 'RED' | null; meters: number } {
+    if (this.playerY > 1.2) return { phase: null, meters: 0 };
     let bestMeters = 999;
     let bestPhase: 'GREEN' | 'YELLOW' | 'RED' | null = null;
     for (const inter of this.world.intersections) {
-      let dist = this.playerZ - inter.baseZ;
-      while (dist < 0) dist += GAME_CONFIG.LOOP_LENGTH;
-      if (dist < 110 && dist < bestMeters) {
+      if (Math.abs(this.playerX - inter.baseX) > 14) continue;
+      const dist = this.playerZ - inter.baseZ;
+      if (dist > 0 && dist < 120 && dist < bestMeters) {
         bestMeters = dist;
         bestPhase = inter.nsPhase;
       }
@@ -2826,36 +3885,98 @@ export class HeroRastarEngine {
 
     const fwdX = -Math.sin(this.playerYaw);
     const fwdZ = -Math.cos(this.playerYaw);
-    // Keep the bike a little in front of frame on every device. On tall
-    // mobile-portrait screens we sit much closer and lower so the bike reads
-    // large and centered instead of shrinking into the distance, while the
-    // HUD + control cluster still have room at the bottom of the screen.
     const portrait = this.camera.aspect < 1;
     const followDist = (portrait ? 4.1 : 5.4) + speedNorm * 0.8;
     const followHeight = (portrait ? 1.95 : 2.4) + speedNorm * 0.3;
 
     _camTarget.set(
       this.playerX - fwdX * followDist + shakeX,
-      followHeight + shakeY,
+      this.playerY + followHeight + shakeY,
       this.playerZ - fwdZ * followDist
     );
-    this.camera.position.x = THREE.MathUtils.damp(this.camera.position.x, _camTarget.x, 10, dt);
-    this.camera.position.y = THREE.MathUtils.damp(this.camera.position.y, _camTarget.y, 10, dt);
+    this.camera.position.x = THREE.MathUtils.damp(this.camera.position.x, _camTarget.x, 12, dt);
+    this.camera.position.y = THREE.MathUtils.damp(this.camera.position.y, _camTarget.y, 12, dt);
     this.camera.position.z = THREE.MathUtils.damp(this.camera.position.z, _camTarget.z, 16, dt);
 
-    _lookTarget.set(this.playerX + fwdX * (10 + speedNorm * 6), 1.0, this.playerZ + fwdZ * (10 + speedNorm * 6));
+    _lookTarget.set(
+      this.playerX + fwdX * (10 + speedNorm * 6),
+      this.playerY + 1.0,
+      this.playerZ + fwdZ * (10 + speedNorm * 6)
+    );
     this.camera.lookAt(_lookTarget);
   }
 
   private getDhakaZoneLabel(): string {
-    if (Math.abs(this.playerX) > GAME_CONFIG.ARTERY_HALF_WIDTH + 3) {
-      return this.playerX < 0 ? 'মহাখালী-ধানমন্ডি গলি (Grid)' : 'গুলশান-তেজগাঁও এভিনিউ (Grid)';
+    switch (this.currentCorridor) {
+      case 'flyover_mohakhali':
+        return 'মহাখালী ফ্লাইওভার';
+      case 'flyover_banani':
+        return 'বনানী ফ্লাইওভার';
+      case 'flyover_kuril':
+        return 'কুড়িল ফ্লাইওভার ইন্টারচেঞ্জ';
+      case 'connector':
+        return 'তেজগাঁও লিংক রোড';
+      case 'expressway300ft':
+        if (this.playerX > 2050) return '৩০০ ফিট • পূর্বাচল ইউ-টার্ন';
+        if (Math.abs(this.playerX - CORRIDOR_CONFIG.NEELA_MARKET_X) < 130) return '৩০০ ফিট • নীলা মার্কেট';
+        return '৩০০ ফিট • পূর্বাচল এক্সপ্রেসওয়ে';
+      case 'tejgaon':
+        return 'তেজগাঁও • হিরো শোরুম রোড';
+      case 'mohakhali':
+        return 'মহাখালী বাস টার্মিনাল রোড';
+      case 'banani':
+        return 'বনানী এয়ারপোর্ট রোড';
+      case 'kuril':
+        return 'কুড়িল বিশ্বরোড মোড়';
+      case 'uttara':
+        return 'উত্তরা • হিরো শোরুম ও ইউ-টার্ন';
+      default: {
+        if (Math.abs(this.playerX) > GAME_CONFIG.ARTERY_HALF_WIDTH + 3) {
+          return this.playerX < 0 ? 'ফার্মগেট-ধানমন্ডি গলি (Grid)' : 'কারওয়ান-তেজগাঁও এভিনিউ (Grid)';
+        }
+        const zAbs = Math.abs(this.playerZ);
+        if (zAbs < 240) return 'ফার্মগেট • ফার্মগেট মেট্রো';
+        if (zAbs < 520) return 'বিজয় সরণি • মেট্রো রোড';
+        if (zAbs < 820) return 'তালতলা • মেট্রো রোড';
+        if (zAbs < 1040) return 'আগারগাঁও • মেট্রো স্টেশন';
+        return 'আগারগাঁও • তেজগাঁও বিলবোর্ড মোড়';
+      }
     }
-    const zAbs = Math.abs(this.playerZ);
-    if (zAbs < 160) return 'ফার্মগেট • ফার্মগেট মেট্রো';
-    if (zAbs < 320) return 'কারওয়ান বাজার • মহাখালী রোড';
-    if (zAbs < 480) return 'শাহবাগ চত্বর • মেট্রো স্টেশন';
-    return 'গুলিস্তান • মতিঝিল জিরো পয়েন্ট';
+  }
+
+  private getRouteHintBn(): string {
+    if (this.currentCorridor === 'expressway300ft') {
+      if (this.playerZ > CORRIDOR_CONFIG.EXPRESSWAY_Z) {
+        return 'পশ্চিমে কুড়িল লোয়ার ফ্লাইওভার দিয়ে মহাখালী ফিরুন ⬅';
+      }
+      if (this.playerX < CORRIDOR_CONFIG.NEELA_SHOWROOM_X - 90) {
+        return 'সামনে নীলা মার্কেট: হিরো শোরুম ও রেস্ট রুম';
+      }
+      if (this.playerX < CORRIDOR_CONFIG.PURBACHAL_UTURN_X - 70) {
+        return 'পূর্বাচল শেষ প্রান্তে ইউ-টার্ন ↩';
+      }
+      return 'ইউ-টার্ন নিয়ে দক্ষিণ লেনে মহাখালী ফিরুন ⬅';
+    }
+    if (this.currentCorridor === 'flyover_kuril') {
+      return 'কুড়িল ফ্লাইওভার: ৩০০ ফিট পূর্বাচল ➡ মহাখালী';
+    }
+    if (this.currentCorridor === 'connector') {
+      return 'সোজা তেজগাঁও হিরো শোরুম ও মহাখালী রোড';
+    }
+    if (this.playerX >= 100 && this.playerX <= 165) {
+      if (this.playerZ > -1760) return 'সামনে তেজগাঁও হিরো শোরুম -> মহাখালী ফ্লাইওভার';
+      if (this.playerZ > -2400) return 'মহাখালী -> বনানী ফ্লাইওভার';
+      if (this.playerZ > -2740) return 'সামনে কুড়িল: ডানে ৩০০ ফিট ➡ | সোজা উত্তরা';
+      if (this.playerZ > -3020) return 'ডানে ৩০০ ফিট এক্সপ্রেসওয়ে ➡ | সোজা উত্তরা';
+      if (this.playerZ > -3600) return 'সামনে উত্তরা হিরো শোরুম ও ইউ-টার্ন';
+      return 'ইউ-টার্ন নিয়ে মহাখালী ফিরুন ⬇';
+    }
+    if (this.playerZ < -1140) return 'সামনে মেট্রো শেষ প্রান্তে ইউ-টার্ন ↩ (তেজগাঁও ফেরত)';
+    if (Math.abs(this.playerZ - CORRIDOR_CONFIG.TEJGAON_TURNOFF_Z) <= 28) {
+      return 'ডানে মোড় নিন ➡ তেজগাঁও লিংক রোড!';
+    }
+    if (this.playerZ > -900) return 'আগারগাঁও মেট্রো পেরিয়ে তেজগাঁও টার্ন ➡';
+    return 'সামনে ডানে "তেজগাঁও এই দিকে ➡" বিলবোর্ড';
   }
 
   private getRankTitleBn(scoreInt: number): string {
@@ -2873,7 +3994,12 @@ export class HeroRastarEngine {
     return null;
   }
 
-  private emitHud(isRefueling = false, isInFuelZone = false, isInShowroomZone = false): void {
+  private emitHud(
+    isRefueling = false,
+    isInFuelZone = false,
+    isInShowroomZone = false,
+    isInRestRoomZone = false
+  ): void {
     const bikeSpec = this.getActiveBikeSpec();
     const light = this.getUpcomingLight();
     const speedKmh = Math.round(Math.abs(this.forwardSpeed) * GAME_CONFIG.SPEED_KMH_FACTOR);
@@ -2910,6 +4036,7 @@ export class HeroRastarEngine {
       nearestPumpMeters: this.getNearestFuelStationMeters(),
       isInShowroomZone,
       nearestShowroomMeters: this.getNearestShowroomMeters(),
+      isInRestRoomZone,
       nextUnlockBikeId: this.getNextUnlockBikeId(),
       combo: this.combo,
       comboTimerNorm: THREE.MathUtils.clamp(this.comboTimer / bikeSpec.comboHoldSec, 0, 1),
@@ -2932,11 +4059,13 @@ export class HeroRastarEngine {
       gameOverRoastsBn: this.gameOverRoastsBn,
       lapCount: this.lapCount,
       zoneLabelBn: this.getDhakaZoneLabel(),
+      routeHintBn: this.getRouteHintBn(),
       upcomingLight: light.phase,
       upcomingLightMeters: light.meters,
       sfxMuted: this.audio.isSfxMuted(),
       musicMuted: this.audio.isMusicMuted(),
       motionStatus: this.motion.getStatus(),
+      environmentPreset: this.environmentPreset,
     });
   }
 
@@ -2953,6 +4082,7 @@ export class HeroRastarEngine {
 
     this.motion.disable();
     this.audio.dispose();
+    this.skyTex.dispose();
     this.textures.dispose();
 
     this.scene.traverse((obj) => {
