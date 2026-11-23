@@ -1628,6 +1628,11 @@ export class HeroRastarEngine {
     this.smoothedSteer = 0;
   }
 
+  /** Re-captures the neutral tilt so the rider's current hold angle becomes "straight". */
+  public recalibrateMotionControl(): void {
+    this.motion.recalibrate();
+  }
+
   public getMotionStatus(): MotionStatus {
     return this.motion.getStatus();
   }

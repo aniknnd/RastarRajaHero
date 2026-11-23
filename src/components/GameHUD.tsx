@@ -59,6 +59,7 @@ interface GameHUDProps {
   onToggleMusicMute: () => void;
   onToggleTouchControls: () => void;
   onToggleMotion: () => void;
+  onRecalibrateMotion: () => void;
   onCycleEnvironment: () => void;
   onSelectEnvironment: (preset: EnvironmentPresetId) => void;
   onOpenShowroom: () => void;
@@ -340,6 +341,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   onToggleMusicMute,
   onToggleTouchControls,
   onToggleMotion,
+  onRecalibrateMotion,
   onCycleEnvironment,
   onSelectEnvironment,
   onOpenShowroom,
@@ -1128,28 +1130,61 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                           : 'Motion Steering (tilt device)'
               }
               aria-pressed={motionActive}
-              className={`bg-slate-950/82 border hover:border-amber-400 p-1 sm:p-1.5 rounded-md cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border-2 cursor-pointer transition-colors ${
                 motionStatus === 'active'
-                  ? 'border-sky-300/80 shadow-[0_0_12px_rgba(56,189,248,0.55)]'
+                  ? 'bg-sky-500/25 border-sky-300 shadow-[0_0_16px_rgba(56,189,248,0.7)]'
                   : motionStatus === 'waiting'
-                    ? 'border-amber-300/80 shadow-[0_0_12px_rgba(251,191,36,0.5)]'
+                    ? 'bg-amber-500/20 border-amber-300 shadow-[0_0_14px_rgba(251,191,36,0.6)] animate-pulse'
                     : motionStatus === 'denied' || motionStatus === 'unsupported' || motionStatus === 'insecure'
-                      ? 'border-red-400/70'
-                      : 'border-slate-600/80'
+                      ? 'bg-red-500/15 border-red-400/80'
+                      : 'bg-slate-900/90 border-amber-400/70 hover:border-amber-300 hover:bg-slate-800/90 animate-pulse'
               }`}
             >
               <Smartphone
-                className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${
+                className={`w-5 h-5 ${
                   motionStatus === 'active'
                     ? 'text-sky-300'
                     : motionStatus === 'waiting'
-                      ? 'text-amber-300 animate-pulse'
+                      ? 'text-amber-300'
                       : motionStatus === 'denied' || motionStatus === 'unsupported' || motionStatus === 'insecure'
                         ? 'text-red-400'
-                        : 'text-slate-400'
+                        : 'text-amber-300'
                 }`}
               />
+              <span
+                className={`font-bengali text-xs font-extrabold leading-none ${
+                  motionStatus === 'active'
+                    ? 'text-sky-200'
+                    : motionStatus === 'waiting'
+                      ? 'text-amber-200'
+                      : motionStatus === 'denied' || motionStatus === 'unsupported' || motionStatus === 'insecure'
+                        ? 'text-red-300'
+                        : 'text-amber-200'
+                }`}
+              >
+                {motionStatus === 'active'
+                  ? 'মোশন চালু'
+                  : motionStatus === 'waiting'
+                    ? 'খুঁজছে…'
+                    : motionStatus === 'denied' || motionStatus === 'unsupported' || motionStatus === 'insecure'
+                      ? 'মোশন বন্ধ'
+                      : 'মোশন'}
+              </span>
             </button>
+            {motionStatus === 'active' && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.currentTarget.blur();
+                  onRecalibrateMotion();
+                }}
+                title="Recenter motion (hold phone straight, then tap)"
+                className="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-emerald-400/60 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span className="font-bengali text-[11px] font-bold leading-none">রিসেন্টার</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={(e) => {

@@ -784,7 +784,7 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
       }
     }
 
-    // Metro End U-Turn Arch & Paved Turnaround Loop at b === 15 (z = -1200 .. -1265)
+    // Metro End U-Turn Arch, Painted Arrows, Warning Gantry & Paved Turnaround Loop at b === 15 (z = -1200 .. -1265)
     if (b === 15) {
       const uArch = buildUTurnSignArch(textures.uturnSigns.metroEnd, 24);
       uArch.position.set(0, 0, 36); // world z = -1204
@@ -794,9 +794,31 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
       uLoop.position.set(0, 0.022, 8); // world z = -1232 (covers -1201..-1263)
       g.add(uLoop);
 
-      const endWall = new THREE.Mesh(new THREE.BoxGeometry(39, 1.1, 1.2), chevronRedMat);
-      endWall.position.set(0, 0.55, -24); // world z = -1264
+      // Taller, more visible end wall with a bright warning stripe on top so the
+      // dead-end reads clearly at speed (was a low 1.1m wall that blended in).
+      const endWall = new THREE.Mesh(new THREE.BoxGeometry(39, 1.6, 1.4), chevronRedMat);
+      endWall.position.set(0, 0.8, -24); // world z = -1264
       g.add(endWall);
+      const endStripe = new THREE.Mesh(
+        new THREE.BoxGeometry(39, 0.22, 1.5),
+        new THREE.MeshBasicMaterial({ color: 0xfef08a })
+      );
+      endStripe.position.set(0, 1.62, -24); // bright top edge on the end wall
+      g.add(endStripe);
+
+      // Painted U-turn arrow stencils on the approach so riders see the turn
+      // coming before they reach the dead end (mirrors the Tejgaon turnoff arrows).
+      for (const arrowLocalZ of [20, 36, 50]) {
+        const arrow = makeFlatPlane(8.6, 8.6, turnArrowMat);
+        arrow.position.set(3.2, 0.018, arrowLocalZ); // world z = -1220, -1204, -1190
+        g.add(arrow);
+      }
+
+      // "U-Turn Ahead" warning gantry on the approach (world z ~ -1185) so the
+      // rider knows to slow and turn before the road ends.
+      const warnGantry = buildHighwayDirectionGantry(textures.uturnSigns.metroEnd);
+      warnGantry.position.set(0, 0, 55); // world z = -1185
+      g.add(warnGantry);
     }
 
     registerChunk(`metro_ext_${b}`, 0, baseZ, 85, g);

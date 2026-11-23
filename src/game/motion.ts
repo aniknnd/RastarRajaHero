@@ -40,6 +40,11 @@ export class MotionController {
   /** Latest unsmoothed tilt angle (used for spike rejection). */
   private lastTiltDeg: number | null = null;
 
+  /** Auto-trim: how long steering has been near zero (seconds). */
+  private nearZeroTimer = 0;
+  /** Auto-trim: the live unsmoothed tilt used to slowly relax the neutral. */
+  private liveTiltDeg = 0;
+
   /** Unsmoothed steering target from the latest sensor sample. */
   private rawSteer = 0;
   /** Low-pass filtered steering actually reported to the engine. */
@@ -171,6 +176,21 @@ export class MotionController {
     if (Math.abs(this.smoothedSteer) < 0.002 && Math.abs(this.rawSteer) < 0.002) {
       this.smoothedSteer = 0;
     }
+
+    // Auto-trim: if steering has been near zero for a sustained period (~1.2s),
+    // slowly relax the captured neutral toward the live tilt angle. This means
+    // "hold the phone still and straight → bike goes straight" even if your grip
+    // drifts a degree or two over time (fixes the constant-right-drift problem).
+    if (this.calibrated && Math.abs(this.smoothedSteer) < 0.06 && Math.abs(this.rawSteer) < 0.06) {
+      this.nearZeroTimer += dt;
+      if (this.nearZeroTimer > 1.2) {
+        const trimRate = 1 - Math.exp(-0.8 * dt);
+        this.baseTiltDeg += (this.liveTiltDeg - this.baseTiltDeg) * trimRate;
+        this.baseTiltDeg = clamp(this.baseTiltDeg, -this.maxNeutralBiasDeg, this.maxNeutralBiasDeg);
+      }
+    } else {
+      this.nearZeroTimer = 0;
+    }
     return this.smoothedSteer;
   }
 
@@ -182,6 +202,8 @@ export class MotionController {
     this.rawSteer = 0;
     this.smoothedSteer = 0;
     this.latestSpeedNorm = 0;
+    this.nearZeroTimer = 0;
+    this.liveTiltDeg = 0;
   }
 
   private handleOrientation = (event: DeviceOrientationEvent): void => {
@@ -214,17 +236,34 @@ export class MotionController {
 
     if (!this.calibrated) {
       this.warmupSamples.push(tiltDeg);
-      if (this.warmupSamples.length < 4) {
+      if (this.warmupSamples.length < 8) {
         this.rawSteer = 0;
         return;
       }
-      // Drop the very first packet (often stale/cached on tap), average the next 3
-      const settled = this.warmupSamples.slice(1);
+      // Pick the steadiest contiguous 4-sample window from the warmup buffer.
+      // This avoids locking onto a crooked tap frame when the hand was still settling.
+      const buf = this.warmupSamples;
+      let bestStart = 0;
+      let bestSpread = Infinity;
+      for (let i = 0; i <= buf.length - 4; i++) {
+        const win = buf.slice(i, i + 4);
+        const mean = win.reduce((s, v) => s + v, 0) / 4;
+        const spread = win.reduce((s, v) => s + Math.abs(v - mean), 0);
+        if (spread < bestSpread) {
+          bestSpread = spread;
+          bestStart = i;
+        }
+      }
+      const settled = buf.slice(bestStart, bestStart + 4);
       const avg = settled.reduce((sum, v) => sum + v, 0) / settled.length;
       // If user tapped while phone was heavily tilted (>15°), fall back to true level horizon (0°)
       this.baseTiltDeg = Math.abs(avg) <= 15 ? clamp(avg, -this.maxNeutralBiasDeg, this.maxNeutralBiasDeg) : 0;
+      this.liveTiltDeg = tiltDeg;
       this.calibrated = true;
+      return;
     }
+
+    this.liveTiltDeg = tiltDeg;
 
     // Speed-aware tilt gain & deadzone (game-quality feel like Asphalt / Traffic Rider):
     //   - At crawl speed: tight deadzone (3.2°) + full lock at 22° → nimble, precise.

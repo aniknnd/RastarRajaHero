@@ -170,6 +170,13 @@ export default function App() {
     }, 2200);
   }, []);
 
+  const handleRecalibrateMotion = useCallback(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.recalibrateMotionControl();
+    engine.showNotice('মোশন রিসেন্টার', 'ফোন সোজা ধরে কয়েক মুহূর্ত স্থির রাখুন', 'bonus');
+  }, []);
+
   const handleCycleEnvironment = useCallback(() => {
     engineRef.current?.cycleEnvironmentPreset();
   }, []);
@@ -220,6 +227,7 @@ export default function App() {
         onToggleMusicMute={handleToggleMusicMute}
         onToggleTouchControls={handleToggleTouchControls}
         onToggleMotion={handleToggleMotion}
+        onRecalibrateMotion={handleRecalibrateMotion}
         onCycleEnvironment={handleCycleEnvironment}
         onSelectEnvironment={handleSelectEnvironment}
         onOpenShowroom={handleOpenShowroom}
