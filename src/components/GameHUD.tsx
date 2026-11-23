@@ -686,7 +686,19 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   if (hud.gameState === GameState.MENU) {
     return (
       <div className="fixed inset-0 z-20 pointer-events-auto overflow-auto overscroll-contain">
-        <div className="min-h-full flex flex-col gap-3 p-4 sm:p-6">
+        {/* Cover photo background (menu only) */}
+        <img
+          src={`${import.meta.env.BASE_URL}assets/coverphoto/Coverphoto.png`}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+          className="fixed inset-0 w-full h-full object-cover object-center pointer-events-none select-none"
+        />
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 bg-gradient-to-b from-slate-950/45 via-slate-950/35 to-slate-950/90 pointer-events-none"
+        />
+        <div className="relative min-h-full flex flex-col gap-3 p-4 sm:p-6">
           {/* Top bar: Best Score + Hero Bank + Audio Toggle */}
           <div className="flex flex-wrap items-center justify-between gap-2 pointer-events-auto shrink-0">
           <div className="flex flex-wrap items-center gap-2">

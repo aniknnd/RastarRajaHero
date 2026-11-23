@@ -44,14 +44,20 @@ export class MotionController {
   private rawSteer = 0;
   /** Low-pass filtered steering actually reported to the engine. */
   private smoothedSteer = 0;
+  /** Latest speed (0..1) reported by the engine, used for speed-aware tilt gain. */
+  private latestSpeedNorm = 0;
 
   private screenAngle = 0;
   private status: MotionStatus = 'off';
 
-  /** Full-lock tilt in degrees; beyond this steering saturates. */
-  private readonly maxTiltDeg = 32;
-  /** Steady-hand deadzone in degrees so holding level tracks dead straight. */
-  private readonly deadzoneDeg = 4.0;
+  /** Full-lock tilt in degrees (low-speed base; high-speed adds more). */
+  private readonly baseMaxTiltDeg = 22;
+  /** Extra tilt needed for full lock at top speed (high-speed stability). */
+  private readonly highSpeedMaxTiltDeg = 42;
+  /** Steady-hand deadzone in degrees at low speed. */
+  private readonly baseDeadzoneDeg = 3.2;
+  /** Extra deadzone at top speed to absorb hand tremor. */
+  private readonly highSpeedDeadzoneDeg = 6.5;
   /** Max allowed neutral offset from true horizon so crooked taps never drift forever. */
   private readonly maxNeutralBiasDeg = 8.0;
 
@@ -144,10 +150,23 @@ export class MotionController {
     this.resetCalibrationState();
   }
 
-  /** Smoothed steering in [-1, 1] (+1 left, -1 right). Call once per frame. */
-  public getSteer(dt: number): number {
+  /**
+   * Smoothed steering in [-1, 1] (+1 left, -1 right).
+   *
+   * Speed-aware: at high speed the steering return-to-center is slower and more
+   * damped so a shaky hand at 120 km/h doesn't weave the bike, while at low speed
+   * it's quicker for responsive maneuvering.
+   *
+   * @param dt    Frame delta in seconds.
+   * @param speedNorm  Current speed normalized to the bike's top speed (0..1).
+   */
+  public getSteer(dt: number, speedNorm = 0): number {
     if (!this.enabled || this.status !== 'active') return 0;
-    const k = 1 - Math.exp(-14 * Math.min(Math.max(dt, 0.001), 0.05));
+    const sn = clamp(speedNorm, 0, 1);
+    this.latestSpeedNorm = sn;
+    // Low-pass cutoff: ~9 Hz at crawl (responsive) → ~4.5 Hz at top speed (planted).
+    const cutoffHz = 9.0 - 4.5 * sn;
+    const k = 1 - Math.exp(-cutoffHz * Math.PI * 2 * Math.min(Math.max(dt, 0.001), 0.05));
     this.smoothedSteer += (this.rawSteer - this.smoothedSteer) * k;
     if (Math.abs(this.smoothedSteer) < 0.002 && Math.abs(this.rawSteer) < 0.002) {
       this.smoothedSteer = 0;
@@ -162,6 +181,7 @@ export class MotionController {
     this.lastTiltDeg = null;
     this.rawSteer = 0;
     this.smoothedSteer = 0;
+    this.latestSpeedNorm = 0;
   }
 
   private handleOrientation = (event: DeviceOrientationEvent): void => {
@@ -206,15 +226,23 @@ export class MotionController {
       this.calibrated = true;
     }
 
+    // Speed-aware tilt gain & deadzone (game-quality feel like Asphalt / Traffic Rider):
+    //   - At crawl speed: tight deadzone (3.2°) + full lock at 22° → nimble, precise.
+    //   - At top speed:   wider deadzone (6.5°) + full lock at 42° → planted, no twitch.
+    const sn = this.latestSpeedNorm;
+    const maxTilt = this.baseMaxTiltDeg + (this.highSpeedMaxTiltDeg - this.baseMaxTiltDeg) * sn;
+    const deadzone = this.baseDeadzoneDeg + (this.highSpeedDeadzoneDeg - this.baseDeadzoneDeg) * sn;
+
     const deltaDeg = wrapDeg(tiltDeg - this.baseTiltDeg);
     const absDeg = Math.abs(deltaDeg);
-    if (absDeg <= this.deadzoneDeg) {
+    if (absDeg <= deadzone) {
       this.rawSteer = 0;
       return;
     }
 
-    const norm = clamp((absDeg - this.deadzoneDeg) / (this.maxTiltDeg - this.deadzoneDeg), 0, 1);
-    const curved = Math.pow(norm, 1.25);
+    const norm = clamp((absDeg - deadzone) / (maxTilt - deadzone), 0, 1);
+    // Gentle expo: soft near center for micro-stability, progressively firmer outward.
+    const curved = Math.pow(norm, 1.3);
     // Positive tiltDeg = rolled RIGHT; engine positive steer = LEFT turn, so negate.
     this.rawSteer = -Math.sign(deltaDeg) * curved;
   };

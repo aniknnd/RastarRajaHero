@@ -2151,6 +2151,13 @@ export class HeroRastarEngine {
     const motionThrottle =
       this.motion.isActive() && !this.input.brake && !this.input.reverse && !this.input.handbrake;
 
+    // In motion mode, cap auto-throttle to a controllable cruising pace (~72% of
+    // the bike's normal max) so the bike doesn't pin to top speed where tilt
+    // steering becomes twitchy. Boost still overrides (to exceed the cap), and the
+    // brake can slow further. This is what makes motion mode feel "planted" at speed.
+    const motionCruiseMps = bikeSpec.maxNormalMps * 0.72;
+    const effectiveMaxFwdMps = motionThrottle ? motionCruiseMps : maxFwdMps;
+
     let accel = 0;
     if (this.input.handbrake || brakingWithTouchBrake) {
       accel = this.forwardSpeed > 0.5 ? -32 : this.forwardSpeed < -0.5 ? 24 : 0;
@@ -2168,34 +2175,32 @@ export class HeroRastarEngine {
       if (Math.abs(this.forwardSpeed) < 0.35) this.forwardSpeed = 0;
     }
 
-    this.forwardSpeed = THREE.MathUtils.clamp(this.forwardSpeed + accel * dt, maxRevMps, maxFwdMps);
-    if (!isBoosting && this.forwardSpeed > (hasFuel ? bikeSpec.maxNormalMps : GAME_CONFIG.MAX_SPEED_EMPTY_MPS)) {
-      this.forwardSpeed = THREE.MathUtils.damp(
-        this.forwardSpeed,
-        hasFuel ? bikeSpec.maxNormalMps : GAME_CONFIG.MAX_SPEED_EMPTY_MPS,
-        2.6,
-        dt
-      );
+    this.forwardSpeed = THREE.MathUtils.clamp(this.forwardSpeed + accel * dt, maxRevMps, effectiveMaxFwdMps);
+    // In motion mode, gently settle to the cruise cap (unless boosting).
+    const overspeedTarget = motionThrottle
+      ? Math.min(hasFuel ? bikeSpec.maxNormalMps : GAME_CONFIG.MAX_SPEED_EMPTY_MPS, motionCruiseMps)
+      : hasFuel
+        ? bikeSpec.maxNormalMps
+        : GAME_CONFIG.MAX_SPEED_EMPTY_MPS;
+    if (!isBoosting && this.forwardSpeed > overspeedTarget) {
+      this.forwardSpeed = THREE.MathUtils.damp(this.forwardSpeed, overspeedTarget, 2.6, dt);
     }
 
     // 2. Smoothed Speed-Scaled Steering (smooth ramp-in, crisp center on release, flips in reverse)
     const keySteer = (this.input.left ? 1 : 0) - (this.input.right ? 1 : 0); // +1 left (+Yaw CCW), -1 right
     // Motion / tilt steering only takes over when no key or touch steer is held,
     // so the on-screen buttons always win when both are available.
-    const motionSteer = this.motion.getSteer(dt);
+    const speedNormPre = THREE.MathUtils.clamp(Math.abs(this.forwardSpeed) / bikeSpec.maxBoostMps, 0, 1);
+    const motionSteer = this.motion.getSteer(dt, speedNormPre);
     const rawSteer = keySteer !== 0 ? keySteer : motionSteer;
-    // Steeper ramp-in so taps build up smoothly (no instant snap), while releasing
+    // Responsive ramp-in so taps build up smoothly (no instant snap), while releasing
     // the stick still re-centers quickly so you never fight a lingering lean.
-    const steerRate = rawSteer !== 0 ? 3.8 : 13.0;
+    const steerRate = rawSteer !== 0 ? 6.2 : 14.0;
     this.smoothedSteer = THREE.MathUtils.damp(this.smoothedSteer, rawSteer, steerRate, dt);
-    // Expo curve: small inputs stay gentle and precise, only a full press reaches
-    // full lock. This removes the twitchy "chakes" feeling on light taps.
-    const steerCurve = (v: number): number => {
-      const a = Math.abs(v);
-      const curved = a * a * (3 - 2 * a); // smoothstep — soft at the edges, firm mid-range
-      return Math.sign(v) * curved;
-    };
-    const effectiveSteer = steerCurve(this.smoothedSteer);
+    // Gentle expo (v^1.2): small inputs stay a touch softer for fine control, but the
+    // mid-range stays fully usable (unlike smoothstep, which compressed it to near-zero).
+    const sAbs = Math.abs(this.smoothedSteer);
+    const effectiveSteer = Math.sign(this.smoothedSteer) * Math.pow(sAbs, 1.2);
 
     // 2b. Automatic U-Turn Speed Reduction & Cornering Assist
     const inUTurnPlaza = this.isInUTurnZone(this.playerX, this.playerZ);
@@ -2208,6 +2213,13 @@ export class HeroRastarEngine {
     } else if (isSharpUTurnSteer && this.forwardSpeed > 15.2 && !isBoosting) {
       // Gentle auto-slowdown when making a tight hairpin U-turn anywhere on the road
       this.forwardSpeed = THREE.MathUtils.damp(this.forwardSpeed, 14.8, 2.2, dt);
+    }
+    // Cornering speed-scrub (motion mode only): when leaning hard at speed, gently
+    // scrub a little speed to maintain grip — mimics real racing-game cornering feel
+    // and makes high-speed tilt steering feel planted rather than twitchy.
+    if (motionThrottle && !isBoosting && Math.abs(this.smoothedSteer) > 0.55 && this.forwardSpeed > 16) {
+      const scrub = 3.5 * Math.abs(this.smoothedSteer) * dt;
+      this.forwardSpeed = Math.max(10, this.forwardSpeed - scrub);
     }
 
     const absSpeed = Math.abs(this.forwardSpeed);
