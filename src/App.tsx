@@ -67,6 +67,9 @@ const INITIAL_HUD: HudSnapshot = {
   sfxMuted: false,
   musicMuted: false,
   motionStatus: 'off',
+  motionSensitivity: 'medium',
+  motionSteer: 0,
+  motionThrottle: 0,
   environmentPreset: 'sunset',
 };
 
@@ -80,6 +83,7 @@ export default function App() {
   const [musicMuted, setMusicMuted] = useState(false);
   const [showTouchControls, setShowTouchControls] = useState(true);
   const [motionActive, setMotionActive] = useState(false);
+  const [motionSensitivity, setMotionSensitivity] = useState<'low' | 'medium' | 'high'>('medium');
 
   useEffect(() => {
     const container = mountRef.current;
@@ -177,6 +181,17 @@ export default function App() {
     engine.showNotice('মোশন রিসেন্টার', 'ফোন সোজা ধরে কয়েক মুহূর্ত স্থির রাখুন', 'bonus');
   }, []);
 
+  const handleCycleMotionSensitivity = useCallback(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    setMotionSensitivity((prev) => {
+      const order: Array<'low' | 'medium' | 'high'> = ['low', 'medium', 'high'];
+      const next = order[(order.indexOf(prev) + 1) % order.length];
+      engine.setMotionSensitivity(next);
+      return next;
+    });
+  }, []);
+
   const handleCycleEnvironment = useCallback(() => {
     engineRef.current?.cycleEnvironmentPreset();
   }, []);
@@ -228,6 +243,8 @@ export default function App() {
         onToggleTouchControls={handleToggleTouchControls}
         onToggleMotion={handleToggleMotion}
         onRecalibrateMotion={handleRecalibrateMotion}
+        motionSensitivity={motionSensitivity}
+        onCycleMotionSensitivity={handleCycleMotionSensitivity}
         onCycleEnvironment={handleCycleEnvironment}
         onSelectEnvironment={handleSelectEnvironment}
         onOpenShowroom={handleOpenShowroom}

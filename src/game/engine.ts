@@ -356,6 +356,7 @@ export class HeroRastarEngine {
   private bikeHeadlightSpot: THREE.SpotLight;
   private bikeHeadlightCone: THREE.Mesh;
   private environmentPreset: EnvironmentPresetId = 'sunset';
+  private motionSensitivity: 'low' | 'medium' | 'high' = 'medium';
   private sunOffset = new THREE.Vector3(42, 17, -34);
   private isSoftwareGl: boolean;
   private textures: ProceduralTextureSet;
@@ -632,6 +633,8 @@ export class HeroRastarEngine {
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
     window.addEventListener('pointerdown', this.handleFirstGesture, { passive: true });
+    // iOS Safari requires touchstart or click (not pointerdown) for audio unlock.
+    window.addEventListener('touchstart', this.handleFirstGesture, { passive: true });
 
     this.audio.setMusicMode('menu');
     this.world.updateAroundPlayer(this.playerZ, 0);
@@ -1633,6 +1636,13 @@ export class HeroRastarEngine {
     this.motion.recalibrate();
   }
 
+  /** Sets motion steering sensitivity (low = more tilt needed, high = less). */
+  public setMotionSensitivity(preset: 'low' | 'medium' | 'high'): void {
+    this.motionSensitivity = preset;
+    this.motion.setSensitivity(preset);
+    this.emitHud();
+  }
+
   public getMotionStatus(): MotionStatus {
     return this.motion.getStatus();
   }
@@ -2152,7 +2162,9 @@ export class HeroRastarEngine {
 
     // Motion steering implies auto-throttle: while tilt mode is live the bike
     // keeps rolling forward so the rider only has to lean the phone to steer.
+    // The rider can modulate speed by leaning forward (accelerate) or back (brake).
     // Braking / reverse / handbrake always take priority below.
+    const motionThrottleAxis = this.motion.getThrottle(dt);
     const motionThrottle =
       this.motion.isActive() && !this.input.brake && !this.input.reverse && !this.input.handbrake;
 
@@ -2160,8 +2172,12 @@ export class HeroRastarEngine {
     // the bike's normal max) so the bike doesn't pin to top speed where tilt
     // steering becomes twitchy. Boost still overrides (to exceed the cap), and the
     // brake can slow further. This is what makes motion mode feel "planted" at speed.
+    // The throttle axis modulates: forward lean raises the cap, back lean lowers it.
     const motionCruiseMps = bikeSpec.maxNormalMps * 0.72;
-    const effectiveMaxFwdMps = motionThrottle ? motionCruiseMps : maxFwdMps;
+    const throttleModulation = 1.0 + motionThrottleAxis * 0.28; // ±28% from center
+    const effectiveMaxFwdMps = motionThrottle
+      ? bikeSpec.maxNormalMps * THREE.MathUtils.clamp(throttleModulation, 0.5, 1.0)
+      : maxFwdMps;
 
     let accel = 0;
     if (this.input.handbrake || brakingWithTouchBrake) {
@@ -2183,12 +2199,17 @@ export class HeroRastarEngine {
     this.forwardSpeed = THREE.MathUtils.clamp(this.forwardSpeed + accel * dt, maxRevMps, effectiveMaxFwdMps);
     // In motion mode, gently settle to the cruise cap (unless boosting).
     const overspeedTarget = motionThrottle
-      ? Math.min(hasFuel ? bikeSpec.maxNormalMps : GAME_CONFIG.MAX_SPEED_EMPTY_MPS, motionCruiseMps)
+      ? Math.min(hasFuel ? bikeSpec.maxNormalMps : GAME_CONFIG.MAX_SPEED_EMPTY_MPS, effectiveMaxFwdMps)
       : hasFuel
         ? bikeSpec.maxNormalMps
         : GAME_CONFIG.MAX_SPEED_EMPTY_MPS;
     if (!isBoosting && this.forwardSpeed > overspeedTarget) {
       this.forwardSpeed = THREE.MathUtils.damp(this.forwardSpeed, overspeedTarget, 2.6, dt);
+    }
+    // Motion throttle-axis braking: leaning the phone back applies gentle engine
+    // braking (in addition to the dedicated brake button).
+    if (motionThrottle && motionThrottleAxis < -0.3 && this.forwardSpeed > 3) {
+      this.forwardSpeed = THREE.MathUtils.damp(this.forwardSpeed, 6, 3.5, dt);
     }
 
     // 2. Smoothed Speed-Scaled Steering (smooth ramp-in, crisp center on release, flips in reverse)
@@ -4082,6 +4103,9 @@ export class HeroRastarEngine {
       sfxMuted: this.audio.isSfxMuted(),
       musicMuted: this.audio.isMusicMuted(),
       motionStatus: this.motion.getStatus(),
+      motionSensitivity: this.motionSensitivity,
+      motionSteer: this.smoothedSteer,
+      motionThrottle: this.motion.getThrottle(0),
       environmentPreset: this.environmentPreset,
     });
   }
@@ -4096,6 +4120,7 @@ export class HeroRastarEngine {
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
     window.removeEventListener('pointerdown', this.handleFirstGesture);
+    window.removeEventListener('touchstart', this.handleFirstGesture);
 
     this.motion.disable();
     this.audio.dispose();

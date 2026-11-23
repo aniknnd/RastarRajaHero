@@ -66,6 +66,10 @@ export class GameAudio {
         if (path === AUDIO_PATHS.musicMenu) continue;
         this.sfxCache.set(path, this.createTrack(path, false, 0.78));
       }
+
+      // Retry AudioContext.resume() when the tab becomes visible again — mobile
+      // browsers suspend the context when backgrounded and don't auto-resume.
+      document.addEventListener('visibilitychange', this.handleVisibilityChange);
     }
   }
 
@@ -127,11 +131,21 @@ export class GameAudio {
         // Safe fallback
       }
     } else if (this.ctx && this.ctx.state === 'suspended') {
-      void this.ctx.resume().catch(() => {});
+      void this.ctx.resume().then(() => {
+        this.syncMusicPlayback();
+      }).catch(() => {});
     }
 
     this.syncMusicPlayback();
   }
+
+  /** Retry AudioContext.resume() when the tab becomes visible (mobile suspend fix). */
+  private handleVisibilityChange = (): void => {
+    if (document.visibilityState === 'visible' && this.ctx && this.ctx.state === 'suspended') {
+      void this.ctx.resume().catch(() => {});
+      this.syncMusicPlayback();
+    }
+  };
 
   public setMusicMode(mode: MusicMode): void {
     if (this.musicMode === mode) {
@@ -151,8 +165,13 @@ export class GameAudio {
       this.menuMusic.volume = this.musicMuted ? 0 : 0.34;
       if (wantMenu) {
         if (!this.menuPlayedOnce && this.menuMusic.paused) {
-          this.menuPlayedOnce = true;
-          void this.menuMusic.play().catch(() => {});
+          // Only mark as played once play() actually succeeds — if it rejects
+          // (autoplay blocked, slow load, etc.) we retry on the next sync.
+          void this.menuMusic.play().then(() => {
+            this.menuPlayedOnce = true;
+          }).catch(() => {
+            this.menuPlayedOnce = false;
+          });
         }
       } else {
         this.menuPlayedOnce = false;
@@ -174,7 +193,9 @@ export class GameAudio {
     const nowMs = performance.now();
 
     if (isVoiceLine && !forceInterrupt) {
-      // Avoid clipping short dialogue over itself rapidly
+      // Avoid clipping short dialogue over itself rapidly — but only block if
+      // the previous clip is ACTUALLY still playing (not just within a time
+      // window). If it has ended, the next line can play immediately.
       if (
         this.activeVoiceClip &&
         !this.activeVoiceClip.paused &&
@@ -189,6 +210,12 @@ export class GameAudio {
     if (!base) return;
 
     try {
+      // If a previous voice clip is still playing, pause it before starting a
+      // new one (prevents overlapping dialogue that sounds garbled).
+      if (this.activeVoiceClip && !this.activeVoiceClip.paused && this.activeVoiceClip !== base) {
+        this.activeVoiceClip.pause();
+        this.activeVoiceClip.currentTime = 0;
+      }
       if (forceInterrupt && this.activeVoiceClip && !this.activeVoiceClip.paused) {
         this.activeVoiceClip.pause();
         this.activeVoiceClip.currentTime = 0;
@@ -682,6 +709,9 @@ export class GameAudio {
 
   public dispose(): void {
     this.setMusicMode('none');
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    }
     if (this.menuMusic) {
       this.menuMusic.pause();
       this.menuMusic.src = '';

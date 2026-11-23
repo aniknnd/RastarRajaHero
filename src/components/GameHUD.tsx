@@ -60,6 +60,8 @@ interface GameHUDProps {
   onToggleTouchControls: () => void;
   onToggleMotion: () => void;
   onRecalibrateMotion: () => void;
+  motionSensitivity: 'low' | 'medium' | 'high';
+  onCycleMotionSensitivity: () => void;
   onCycleEnvironment: () => void;
   onSelectEnvironment: (preset: EnvironmentPresetId) => void;
   onOpenShowroom: () => void;
@@ -342,6 +344,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   onToggleTouchControls,
   onToggleMotion,
   onRecalibrateMotion,
+  motionSensitivity,
+  onCycleMotionSensitivity,
   onCycleEnvironment,
   onSelectEnvironment,
   onOpenShowroom,
@@ -1172,18 +1176,57 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               </span>
             </button>
             {motionStatus === 'active' && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.currentTarget.blur();
-                  onRecalibrateMotion();
-                }}
-                title="Recenter motion (hold phone straight, then tap)"
-                className="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-emerald-400/60 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 cursor-pointer"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span className="font-bengali text-[11px] font-bold leading-none">রিসেন্টার</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.currentTarget.blur();
+                    onRecalibrateMotion();
+                  }}
+                  title="Recenter motion (hold phone straight, then tap)"
+                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-emerald-400/60 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span className="font-bengali text-[11px] font-bold leading-none">রিসেন্টার</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.currentTarget.blur();
+                    onCycleMotionSensitivity();
+                  }}
+                  title={`Sensitivity: ${motionSensitivity} (tap to change)`}
+                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-sky-400/60 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25 cursor-pointer"
+                >
+                  <Gauge className="w-4 h-4" />
+                  <span className="font-bengali text-[11px] font-bold leading-none">
+                    {motionSensitivity === 'low' ? 'ধীর' : motionSensitivity === 'high' ? 'দ্রুত' : 'মাঝারি'}
+                  </span>
+                </button>
+                {/* Visual tilt + throttle indicator */}
+                <div className="flex flex-col gap-1 px-1.5 py-1 rounded-lg bg-slate-950/80 border border-slate-600/50">
+                  {/* Steering bar: center = straight, left/right = steer direction */}
+                  <div className="relative w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="absolute left-1/2 top-0 bottom-0 w-px bg-slate-500 z-10" />
+                    <div
+                      className="absolute top-0 bottom-0 w-2 rounded-full bg-sky-400 transition-none"
+                      style={{
+                        left: `calc(50% + ${hud.motionSteer * 28}px - 4px)`,
+                      }}
+                    />
+                  </div>
+                  {/* Throttle bar: left = brake, center = cruise, right = accelerate */}
+                  <div className="relative w-16 h-1 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="absolute left-1/2 top-0 bottom-0 w-px bg-slate-500 z-10" />
+                    <div
+                      className={`absolute top-0 bottom-0 w-2 rounded-full ${hud.motionThrottle < -0.1 ? 'bg-red-400' : 'bg-emerald-400'}`}
+                      style={{
+                        left: `calc(50% + ${hud.motionThrottle * 28}px - 4px)`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </>
             )}
             <button
               type="button"

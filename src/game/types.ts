@@ -236,6 +236,9 @@ export interface HudSnapshot {
   sfxMuted: boolean;
   musicMuted: boolean;
   motionStatus: MotionStatus;
+  motionSensitivity: 'low' | 'medium' | 'high';
+  motionSteer: number;
+  motionThrottle: number;
   environmentPreset: EnvironmentPresetId;
 }
 
