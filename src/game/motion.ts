@@ -111,8 +111,8 @@ export class MotionController {
   private pitchTrimTimer = 0;
 
   /** Filters (tilt = roll for steering, pitch = lean for throttle). */
-  private readonly tiltFilter = new OneEuroFilter(2.2, 0.03);
-  private readonly pitchFilter = new OneEuroFilter(1.6, 0.02);
+  private readonly tiltFilter = new OneEuroFilter(1.6, 0.02);
+  private readonly pitchFilter = new OneEuroFilter(1.2, 0.015);
 
   /** Unsmoothed steering target (before speed-lock scaling). */
   private rawSteer = 0;
@@ -133,15 +133,15 @@ export class MotionController {
   private status: MotionStatus = 'off';
 
   /** Full-lock tilt in degrees. Constant at all speeds so the hand range stays natural. */
-  private maxTiltDeg = 25;
+  private maxTiltDeg = 30;
   /** Steady-hand deadzone in degrees. */
-  private readonly deadzoneDeg = 2.8;
+  private readonly deadzoneDeg = 3.2;
   /**
    * How much steering LOCK is removed at top speed (0..1).
-   * 0.4 means at top speed full tilt gives 60% of full steer. Keeps the bike
+   * 0.2 means at top speed full tilt gives 80% of full steer. Keeps the bike
    * stable at high speed without making the player tilt more.
    */
-  private highSpeedLockReduction = 0.4;
+  private highSpeedLockReduction = 0.2;
   /** Max allowed neutral offset from true horizon so crooked taps never drift forever. */
   private readonly maxNeutralBiasDeg = 8.0;
   /** Calibration timing. */
@@ -274,8 +274,8 @@ export class MotionController {
     const target = this.rawSteer * lock;
 
     // Light output low-pass (the One Euro filter already did the heavy work).
-    // ~16 Hz at crawl -> ~10 Hz at top speed.
-    const cutoffHz = 16 - 6 * sn;
+    // ~11 Hz at crawl -> ~7 Hz at top speed.
+    const cutoffHz = 11 - 4 * sn;
     const k = 1 - Math.exp(-cutoffHz * Math.PI * 2 * frameDt);
     this.smoothedSteer += (target - this.smoothedSteer) * k;
     if (Math.abs(this.smoothedSteer) < 0.002 && Math.abs(target) < 0.002) {
@@ -332,7 +332,7 @@ export class MotionController {
   /** Steering sensitivity preset: scales the tilt-to-steer gain. */
   public setSensitivity(preset: 'low' | 'medium' | 'high'): void {
     const scale = preset === 'low' ? 1.35 : preset === 'high' ? 0.75 : 1.0;
-    this.maxTiltDeg = 25 * scale;
+    this.maxTiltDeg = 30 * scale;
   }
 
   /** 0..1: how much steering lock is removed at top speed. */
@@ -499,7 +499,7 @@ export class MotionController {
 
     const norm = clamp((absDeg - deadzone) / (maxTilt - deadzone), 0, 1);
     // Gentle expo: soft near center for micro-stability, firmer outward.
-    const curved = Math.pow(norm, 1.3);
+    const curved = Math.pow(norm, 1.4);
     // Positive tiltDeg = rolled RIGHT; engine positive steer = LEFT turn, so negate.
     this.rawSteer = -Math.sign(deltaDeg) * curved;
   };
