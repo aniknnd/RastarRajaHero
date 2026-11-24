@@ -75,6 +75,7 @@ export interface ProceduralTextureSet {
   flyoverFunnyBanners: THREE.CanvasTexture[];
   uturnSigns: {
     metroEnd: THREE.CanvasTexture;
+    downtownSouth: THREE.CanvasTexture;
     tejgaonSouth: THREE.CanvasTexture;
     uttara: THREE.CanvasTexture;
     purbachal: THREE.CanvasTexture;
@@ -1769,6 +1770,7 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     flyoverFunnyBanners,
     uturnSigns: {
       metroEnd: makeUTurnTex('↺ ইউ-টার্ন • তেজগাঁও মোড়', 'ঘুরে তেজগাঁও লিংক রোডে ঢুকুন', '#1e3a8a'),
+      downtownSouth: makeUTurnTex('↺ ইউ-টার্ন • ফার্মগেট-তেজগাঁও', 'শুরুতে ঘুরে মেট্রো রোডে ফিরুন', '#1e3a8a'),
       tejgaonSouth: makeUTurnTex('↺ ইউ-টার্ন • মহাখালী-উত্তরা', 'উত্তরের দিকে মহাখালী ও ৩০০ ফিট যান', '#065f46'),
       uttara: makeUTurnTex('↺ উত্তরা ইউ-টার্ন • মহাখালী ফিরুন', 'পাশেই উত্তরা হিরো শোরুম • ঘুরে ফিরুন', '#991b1b'),
       purbachal: makeUTurnTex('↺ পূর্বাচল শেষ প্রান্ত • ইউ-টার্ন', 'ঘুরে নীলা মার্কেট হয়ে কুড়িল-মহাখালী ফিরুন', '#065f46'),

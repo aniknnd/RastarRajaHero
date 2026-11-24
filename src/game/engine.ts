@@ -2283,6 +2283,40 @@ export class HeroRastarEngine {
     this.playerX += (fwdX * this.forwardSpeed + Math.cos(this.playerYaw) * this.lateralSlip) * dt;
     this.playerZ += (fwdZ * this.forwardSpeed - Math.sin(this.playerYaw) * this.lateralSlip) * dt;
 
+    // Metro Rail south-end turnaround: at the far end, place the bike onto
+    // the opposite lane and reverse heading toward the Tejgaon turnoff.
+    if (
+      this.forwardSpeed > 2 &&
+      fwdZ < -0.5 &&
+      Math.abs(this.playerX) < 18 &&
+      this.playerZ <= CORRIDOR_CONFIG.METRO_END_UTURN_Z - 28
+    ) {
+      this.playerX = this.playerX <= 0 ? 3.25 : -3.25;
+      this.playerZ = -1238;
+      this.playerYaw = Math.PI;
+      this.forwardSpeed = Math.min(this.forwardSpeed, 10);
+      this.lateralSlip = 0;
+      this.pushPopup('মেট্রো রেল ইউ-টার্ন!', 'তেজগাঁওয়ের দিকে ফিরুন • +400 pts!', 'bonus');
+      this.addPoints(400);
+    }
+
+    // Downtown south/start-end turnaround: the mirror of the Metro End loop.
+    // Swing the bike around onto the opposite lane and head back north so the
+    // road behind the spawn never feels like it simply runs out.
+    if (
+      this.forwardSpeed > 2 &&
+      fwdZ > 0.5 &&
+      Math.abs(this.playerX) < 25 &&
+      this.playerZ >= CORRIDOR_CONFIG.DOWNTOWN_SOUTH_UTURN_Z + 20
+    ) {
+      this.playerX = this.playerX <= 0 ? 3.25 : -3.25;
+      this.playerZ = CORRIDOR_CONFIG.DOWNTOWN_SOUTH_UTURN_Z - 4;
+      this.playerYaw = 0;
+      this.forwardSpeed = Math.min(this.forwardSpeed, 10);
+      this.lateralSlip = 0;
+      this.pushPopup('ইউ-টার্ন!', 'মেট্রো ও ফার্মগেটের দিকে ফিরুন', 'bonus');
+    }
+
     // 3. Solid Building, Corridor Bounds & Flyover Guardrails
     this.resolveSolidCollisions();
 
@@ -2353,6 +2387,7 @@ export class HeroRastarEngine {
       if (!this.refuelShieldUsedThisStop) {
         this.refuelShieldUsedThisStop = true;
         this.refuelSafeGraceTimer = 2.0;
+        this.audio.playFuelVoice();
       }
       const capScale = bikeSpec.fuelCapacity / 100;
       this.fuelAmount = Math.min(
@@ -2541,6 +2576,8 @@ export class HeroRastarEngine {
   }
 
   private isInUTurnZone(x: number, z: number): boolean {
+    // 0. Downtown South/Start-End U-Turn Loop (z >= 0, behind the spawn)
+    if (Math.abs(x) <= 25 && z >= 0 && z <= 78) return true;
     // 1. Metro End U-Turn Loop (z <= -1198)
     if (Math.abs(x) <= 20 && z <= -1198) return true;
     // 2. Tejgaon South U-Turn Loop (z >= -1064, x ~ 140)

@@ -321,10 +321,12 @@ interface DrivableRect {
 const GROUND_DRIVABLE_RECTS: readonly DrivableRect[] = [
   // Metro Rail Downtown Grid (z: -720 .. 0, includes ±34 & ±62 side avenues)
   { minX: -77.1, maxX: 77.1, minZ: -720, maxZ: -1 },
+  // Downtown South/Start-End Wide U-Turn Turnaround Loop (behind the spawn, z: -1 .. 78)
+  { minX: -25.0, maxX: 25.0, minZ: -1, maxZ: 78 },
   // Metro Rail Extension Corridor (z: -1262 .. -718, Agargaon -> Tejgaon Turnoff)
-  { minX: -12.6, maxX: 12.6, minZ: -1262, maxZ: -718 },
+  { minX: -12.6, maxX: 12.6, minZ: -1280, maxZ: -718 },
   // Metro End Wide U-Turn Turnaround Loop (z: -1262 .. -1198)
-  { minX: -19.0, maxX: 19.0, minZ: -1262, maxZ: -1198 },
+  { minX: -19.0, maxX: 19.0, minZ: -1280, maxZ: -1198 },
   // Tejgaon East Connector Link Road (z: -1131 .. -1109, x: 0 .. 150)
   { minX: 0, maxX: 150, minZ: -1131, maxZ: -1109 },
   // Tejgaon -> Mohakhali -> Banani -> Kuril -> Uttara North Highway Spine (includes west showroom/pump bays)
@@ -682,8 +684,52 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
   };
 
   // =========================================================================
+  // 0. DOWNTOWN SOUTH / START-END WIDE U-TURN (z = 0 .. 78)
+  //    Mirrors the Metro End turnaround so the road behind the spawn no longer
+  //    dead-ends: riders can swing around and head back toward Farmgate/Metro.
+  // =========================================================================
+  {
+    const g = new THREE.Group();
+    const uTurnZ = CORRIDOR_CONFIG.DOWNTOWN_SOUTH_UTURN_Z; // 20
+
+    const uArch = buildUTurnSignArch(textures.uturnSigns.downtownSouth, 24);
+    uArch.rotation.y = Math.PI;
+    uArch.position.set(0, 0, uTurnZ - 16); // world z = 4, just inside the entrance
+    g.add(uArch);
+
+    // Far-end marker so the turnaround reads clearly instead of a missing wall.
+    const farUArch = buildUTurnSignArch(textures.uturnSigns.downtownSouth, 38);
+    farUArch.rotation.y = Math.PI;
+    farUArch.position.set(0, 0, uTurnZ + 38); // world z = 58
+    g.add(farUArch);
+
+    // Paved turnaround loop, rotated 180° so the chevron bumper faces +Z (south).
+    const uLoop = makeFlatPlane(52, 78, uturnLoopMat, Math.PI);
+    uLoop.position.set(0, 0.022, uTurnZ + 18); // world z = 38 (covers -1 .. 77)
+    g.add(uLoop);
+
+    const endWall = new THREE.Mesh(new THREE.BoxGeometry(39, 1.6, 1.4), chevronRedMat);
+    endWall.position.set(0, 0.8, uTurnZ + 57); // world z = 77
+    g.add(endWall);
+    const endStripe = new THREE.Mesh(
+      new THREE.BoxGeometry(39, 0.22, 1.5),
+      new THREE.MeshBasicMaterial({ color: 0xfef08a })
+    );
+    endStripe.position.set(0, 1.62, uTurnZ + 57);
+    g.add(endStripe);
+
+    registerChunk('downtown_south_uturn', 0, uTurnZ + 18, 90, g);
+  }
+
+  // =========================================================================
   // 1. METRO EXTENSION (-720 to -1265): Agargaon Metro + Tejgaon Billboard + U-Turn
   // =========================================================================
+  const metroFuelStops = [
+    { z: -760, id: 'metro_agargaon_approach_pump', label: 'আগারগাঁও মেট্রো রোড পাম্প' },
+    { z: -1000, id: 'metro_tejgaon_approach_pump', label: 'তেজগাঁও মোড় মেট্রো পাম্প' },
+    { z: -1160, id: 'metro_end_pump', label: 'মেট্রো শেষ প্রান্তের পাম্প' },
+  ];
+
   for (let b = 9; b < 16; b++) {
     const blockLen = 80;
     const baseZ = -(b * blockLen + blockLen / 2); // -760 .. -1240
@@ -694,9 +740,10 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
     g.add(road);
 
     const isTurnoffBlock = b === 13 || b === 14; // z = -1120 lies at boundary of blocks 13 & 14
+    const metroPump = metroFuelStops.find((stop) => Math.abs(stop.z - baseZ) < blockLen / 2);
     for (const side of [-1, 1]) {
       // Leave east sidewalk open at Tejgaon turnoff (-1134..-1106) and open around Metro End U-Turn (b=15)
-      if (b === 15) continue;
+      if (b === 15 || metroPump) continue;
       if (side === 1 && (b === 13 || b === 14)) {
         const segLen = 24;
         const sw = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.11, segLen), sidewalkMat);
@@ -711,6 +758,27 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
         const curbRail = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.55, blockLen), railMat);
         curbRail.position.set(side * (GAME_CONFIG.ARTERY_HALF_WIDTH + 3.15), 0.28, 0);
         g.add(curbRail);
+      }
+    }
+
+    if (metroPump) {
+      for (const roadSide of [-1, 1] as const) {
+        const isWestSide = roadSide < 0;
+        const pumpX = roadSide * 10.2;
+        const station = buildFuelStation(textures, isWestSide);
+        station.position.set(pumpX, 0, metroPump.z - baseZ);
+        g.add(station);
+        fuelStations.push({
+          id: `${metroPump.id}_${isWestSide ? 'west' : 'east'}`,
+          label: `${metroPump.label} • ${isWestSide ? 'পশ্চিম' : 'পূর্ব'} পাশ`,
+          padMinX: isWestSide ? -12.6 : 6.0,
+          padMaxX: isWestSide ? -6.0 : 12.6,
+          padMinZ: metroPump.z - GAME_CONFIG.FUEL_PAD_HALF_LENGTH,
+          padMaxZ: metroPump.z + GAME_CONFIG.FUEL_PAD_HALF_LENGTH,
+          nozzleX: roadSide * 13.2,
+          nozzleY: 1.25,
+          nozzleZ: metroPump.z,
+        });
       }
     }
 
@@ -790,27 +858,21 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
       uArch.position.set(0, 0, 36); // world z = -1204
       g.add(uArch);
 
-      const uLoop = makeFlatPlane(38, 62, uturnLoopMat, 0);
-      uLoop.position.set(0, 0.022, 8); // world z = -1232 (covers -1201..-1263)
+      // A second large U-turn marker sits at the far end so it is visible
+      // instead of looking like an ordinary road with a missing wall.
+      const farUArch = buildUTurnSignArch(textures.uturnSigns.metroEnd, 38);
+      farUArch.position.set(0, 0, -18); // world z = -1258
+      g.add(farUArch);
+
+      const uLoop = makeFlatPlane(52, 78, uturnLoopMat, 0);
+      uLoop.position.set(0, 0.022, 2); // world z = -1238 (covers -1199..-1277)
       g.add(uLoop);
 
-      // Taller, more visible end wall with a bright warning stripe on top so the
-      // dead-end reads clearly at speed (was a low 1.1m wall that blended in).
-      const endWall = new THREE.Mesh(new THREE.BoxGeometry(39, 1.6, 1.4), chevronRedMat);
-      endWall.position.set(0, 0.8, -24); // world z = -1264
-      g.add(endWall);
-      const endStripe = new THREE.Mesh(
-        new THREE.BoxGeometry(39, 0.22, 1.5),
-        new THREE.MeshBasicMaterial({ color: 0xfef08a })
-      );
-      endStripe.position.set(0, 1.62, -24); // bright top edge on the end wall
-      g.add(endStripe);
-
-      // Painted U-turn arrow stencils on the approach so riders see the turn
-      // coming before they reach the dead end (mirrors the Tejgaon turnoff arrows).
-      for (const arrowLocalZ of [20, 36, 50]) {
+      // Painted U-turn arrow stencils on the approach so riders enter the
+      // south-end turnaround clearly (mirrors the Tejgaon turnoff arrows).
+      for (const arrowLocalZ of [-8, 8, 24, 40, 52]) {
         const arrow = makeFlatPlane(8.6, 8.6, turnArrowMat);
-        arrow.position.set(3.2, 0.018, arrowLocalZ); // world z = -1220, -1204, -1190
+        arrow.position.set(3.2, 0.018, arrowLocalZ);
         g.add(arrow);
       }
 

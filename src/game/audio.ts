@@ -12,12 +12,20 @@ const AUDIO_PATHS = {
   gameOver: `${import.meta.env.BASE_URL}assets/aistudio/game_over_d533bd70.mp3`,
   slapReact: `${import.meta.env.BASE_URL}assets/aistudio/game_over-_c69626c2.mp3`,
   pedHit: `${import.meta.env.BASE_URL}assets/aistudio/ped_hit_7cd56047.mp3`,
+  fuelVoice: `${import.meta.env.BASE_URL}assets/aistudio/fuel_voice.mp3`,
   smash1: `${import.meta.env.BASE_URL}assets/aistudio/smash_6ba140df.mp3`,
   smash2: `${import.meta.env.BASE_URL}assets/aistudio/smash2_93873c2b.mp3`,
   smash3: `${import.meta.env.BASE_URL}assets/aistudio/smash3_f2919cb0.mp3`,
 } as const;
 
 export type MusicMode = 'menu' | 'play' | 'none';
+
+type QueuedSfx = {
+  key: string;
+  priority: number;
+  expiresAt: number;
+  start: (done: () => void) => void;
+};
 
 export class GameAudio {
   private ctx: AudioContext | null = null;
@@ -30,7 +38,12 @@ export class GameAudio {
   private menuMusic: HTMLAudioElement | null = null;
   private menuPlayedOnce = false;
   private sfxCache = new Map<string, HTMLAudioElement>();
-  private activeVoiceClip: HTMLAudioElement | null = null;
+  private activeSfxClip: HTMLAudioElement | null = null;
+  private activeSfxGain: GainNode | null = null;
+  private activeSfxKey: string | null = null;
+  private finishActiveSfx: (() => void) | null = null;
+  private sfxQueue: QueuedSfx[] = [];
+  private sfxWatchdog: ReturnType<typeof setTimeout> | null = null;
 
   private musicMode: MusicMode = 'menu';
   private sfxMuted = false;
@@ -39,10 +52,10 @@ export class GameAudio {
   private unlocked = false;
 
   private lastRefuelBeep = 0;
-  private lastVoiceStartMs = 0;
   private lastAnnouncementMs = 0;
   private announcementPlayedThisRide = false;
   private smashIndex = 0;
+  private impactCount = 0;
 
   // --- Sound pacing layer: keep EVERY sound available, but stop them from
   // --- hammering over and over. Short synth "feedback" bursts stay instant;
@@ -55,6 +68,13 @@ export class GameAudio {
     const last = this.sfxLastMs.get(key);
     if (last !== undefined && nowMs - last < gapMs) return false;
     this.sfxLastMs.set(key, nowMs);
+    return true;
+  }
+
+  private shouldPlayImpactSound(): boolean {
+    this.impactCount += 1;
+    if (this.impactCount < 3) return false;
+    this.impactCount = 0;
     return true;
   }
 
@@ -79,6 +99,77 @@ export class GameAudio {
     el.preload = 'auto';
     el.volume = volume;
     return el;
+  }
+
+  private enqueueSfx(key: string, priority: number, start: QueuedSfx['start'], maxWaitMs = 2500): void {
+    if (this.sfxMuted || !this.unlocked) return;
+    const now = performance.now();
+    this.sfxQueue = this.sfxQueue.filter((item) => item.expiresAt > now);
+    if (this.activeSfxKey === key || this.sfxQueue.some((item) => item.key === key)) return;
+
+    this.sfxQueue.push({
+      key,
+      priority,
+      expiresAt: now + maxWaitMs,
+      start,
+    });
+    if (this.sfxQueue.length > 8) {
+      this.sfxQueue.sort((a, b) => b.priority - a.priority);
+      this.sfxQueue.length = 8;
+    }
+    this.pumpSfxQueue();
+  }
+
+  private pumpSfxQueue(): void {
+    if (this.sfxMuted || this.activeSfxKey) return;
+    const now = performance.now();
+    this.sfxQueue = this.sfxQueue.filter((item) => item.expiresAt > now);
+    if (!this.sfxQueue.length) return;
+
+    this.sfxQueue.sort((a, b) => b.priority - a.priority);
+    const next = this.sfxQueue.shift()!;
+    this.activeSfxKey = next.key;
+    let finished = false;
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      if (this.sfxWatchdog) clearTimeout(this.sfxWatchdog);
+      this.sfxWatchdog = null;
+      this.activeSfxClip = null;
+      this.activeSfxGain?.disconnect();
+      this.activeSfxGain = null;
+      this.activeSfxKey = null;
+      this.finishActiveSfx = null;
+      this.pumpSfxQueue();
+    };
+    this.finishActiveSfx = done;
+
+    try {
+      next.start(done);
+    } catch (error) {
+      done();
+      console.error(`Unable to start sound effect "${next.key}"`, error);
+    }
+  }
+
+  private playProceduralSfx(
+    key: string,
+    durationSeconds: number,
+    createSound: (gain: GainNode, now: number) => void,
+    priority = 30,
+    maxWaitMs = 2500
+  ): void {
+    this.enqueueSfx(key, priority, (done) => {
+      if (!this.ctx || !this.masterGain || this.sfxMuted) {
+        done();
+        return;
+      }
+      const gain = this.ctx.createGain();
+      gain.connect(this.masterGain);
+      this.activeSfxGain = gain;
+      this.sfxWatchdog = setTimeout(done, durationSeconds * 1000 + 50);
+      createSound(gain, this.ctx.currentTime);
+    }, maxWaitMs);
   }
 
   public unlock(): void {
@@ -183,53 +274,32 @@ export class GameAudio {
     }
   }
 
-  private playMp3Clip(
-    path: string,
-    volume = 0.82,
-    isVoiceLine = true,
-    forceInterrupt = false
-  ): void {
-    if (this.sfxMuted || !this.unlocked) return;
-    const nowMs = performance.now();
-
-    if (isVoiceLine && !forceInterrupt) {
-      // Avoid clipping short dialogue over itself rapidly — but only block if
-      // the previous clip is ACTUALLY still playing (not just within a time
-      // window). If it has ended, the next line can play immediately.
-      if (
-        this.activeVoiceClip &&
-        !this.activeVoiceClip.paused &&
-        !this.activeVoiceClip.ended &&
-        nowMs - this.lastVoiceStartMs < 1350
-      ) {
-        return;
-      }
-    }
-
+  private playMp3Clip(path: string, volume = 0.82, priority = 60, maxWaitMs = 6000): void {
     const base = this.sfxCache.get(path);
     if (!base) return;
 
-    try {
-      // If a previous voice clip is still playing, pause it before starting a
-      // new one (prevents overlapping dialogue that sounds garbled).
-      if (this.activeVoiceClip && !this.activeVoiceClip.paused && this.activeVoiceClip !== base) {
-        this.activeVoiceClip.pause();
-        this.activeVoiceClip.currentTime = 0;
-      }
-      if (forceInterrupt && this.activeVoiceClip && !this.activeVoiceClip.paused) {
-        this.activeVoiceClip.pause();
-        this.activeVoiceClip.currentTime = 0;
-      }
+    this.enqueueSfx(path, priority, (done) => {
       base.currentTime = 0;
-      base.volume = this.sfxMuted ? 0 : volume;
-      if (isVoiceLine) {
-        this.activeVoiceClip = base;
-        this.lastVoiceStartMs = nowMs;
-      }
-      void base.play().catch(() => {});
-    } catch {
-      // Ignore playback race errors
-    }
+      base.volume = volume;
+      this.activeSfxClip = base;
+      base.onended = () => {
+        base.onended = null;
+        done();
+      };
+      const durationMs = Number.isFinite(base.duration) ? base.duration * 1000 : 0;
+      this.sfxWatchdog = setTimeout(() => {
+        if (!base.paused && !base.ended) {
+          base.pause();
+          base.currentTime = 0;
+        }
+        base.onended = null;
+        done();
+      }, Math.min(Math.max(durationMs + 1500, 10000), 20000));
+      void base.play().catch(() => {
+        base.onended = null;
+        done();
+      });
+    }, maxWaitMs);
   }
 
   public setMuted(mute: boolean): void {
@@ -245,8 +315,11 @@ export class GameAudio {
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setTargetAtTime(mute ? 0 : 0.42, this.ctx.currentTime, 0.04);
     }
-    if (mute && this.activeVoiceClip && !this.activeVoiceClip.paused) {
-      this.activeVoiceClip.pause();
+    if (mute) {
+      this.sfxQueue = [];
+      this.activeSfxClip?.pause();
+      this.activeSfxClip = null;
+      this.finishActiveSfx?.();
     }
   }
 
@@ -291,7 +364,6 @@ export class GameAudio {
   }
 
   public playHorn(pitchScale = 1, isAmbient = false): void {
-    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     if (isAmbient) {
       // Traffic honks in the distance: keep them, but rare and varied,
       // so the SAME honk never repeats like a loop.
@@ -299,11 +371,12 @@ export class GameAudio {
       this.ambientHornGapMs = 9000 + Math.random() * 9000; // next honk in 9-18s
       pitchScale *= 0.8 + Math.random() * 0.45; // vary every honk
     }
-    try {
-      const now = this.ctx.currentTime;
-      const o1 = this.ctx.createOscillator();
-      const o2 = this.ctx.createOscillator();
-      const g = this.ctx.createGain();
+    this.playProceduralSfx('horn', 0.25, (sfxGain, now) => {
+      const ctx = this.ctx;
+      if (!ctx) return;
+      const o1 = ctx.createOscillator();
+      const o2 = ctx.createOscillator();
+      const g = ctx.createGain();
       o1.type = 'sawtooth';
       o2.type = 'sawtooth';
       o1.frequency.setValueAtTime(410 * pitchScale, now);
@@ -314,24 +387,22 @@ export class GameAudio {
       g.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
       o1.connect(g);
       o2.connect(g);
-      g.connect(this.masterGain);
+      g.connect(sfxGain);
       o1.start(now);
       o2.start(now);
       o1.stop(now + 0.25);
       o2.stop(now + 0.25);
-    } catch {
-      // Ignore
-    }
+    }, isAmbient ? 10 : 30);
   }
 
   public playDing(combo = 1): void {
-    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     // Combo dings fire in bursts — keep them chimey, not machine-gun.
     if (!this.sfxGapOk('ding', 280)) return;
-    try {
-      const now = this.ctx.currentTime;
-      const o = this.ctx.createOscillator();
-      const g = this.ctx.createGain();
+    this.playProceduralSfx('ding', 0.19, (sfxGain, now) => {
+      const ctx = this.ctx;
+      if (!ctx) return;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
       o.type = 'triangle';
       const f = 540 + Math.min(combo, 10) * 58;
       o.frequency.setValueAtTime(f, now);
@@ -340,97 +411,49 @@ export class GameAudio {
       g.gain.exponentialRampToValueAtTime(0.22, now + 0.015);
       g.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
       o.connect(g);
-      g.connect(this.masterGain);
+      g.connect(sfxGain);
       o.start(now);
       o.stop(now + 0.19);
-    } catch {
-      // Ignore
-    }
+    }, 20);
   }
 
   public playWhoosh(): void {
-    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     // Near-miss swishes come in chains — a short breather keeps them special.
     if (!this.sfxGapOk('whoosh', 600)) return;
-    try {
-      const now = this.ctx.currentTime;
-      const bufSize = Math.floor(this.ctx.sampleRate * 0.28);
-      const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+    this.playProceduralSfx('whoosh', 0.28, (sfxGain, now) => {
+      const ctx = this.ctx;
+      if (!ctx) return;
+      const bufSize = Math.floor(ctx.sampleRate * 0.28);
+      const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
       const data = buf.getChannelData(0);
       for (let i = 0; i < bufSize; i++) {
         data[i] = (Math.random() * 2 - 1) * Math.sin((i / bufSize) * Math.PI);
       }
-      const src = this.ctx.createBufferSource();
+      const src = ctx.createBufferSource();
       src.buffer = buf;
 
-      const filter = this.ctx.createBiquadFilter();
+      const filter = ctx.createBiquadFilter();
       filter.type = 'bandpass';
       filter.frequency.setValueAtTime(350, now);
       filter.frequency.exponentialRampToValueAtTime(1600, now + 0.25);
 
-      const g = this.ctx.createGain();
+      const g = ctx.createGain();
       g.gain.setValueAtTime(0.2, now);
       g.gain.exponentialRampToValueAtTime(0.01, now + 0.28);
 
       src.connect(filter);
       filter.connect(g);
-      g.connect(this.masterGain);
+      g.connect(sfxGain);
       src.start(now);
-    } catch {
-      // Ignore
-    }
+    }, 15);
   }
 
   public playSmash(): void {
-    // Long Bangla smash voice line: rotate through all 3 uploads, but pace it —
-    // never more than one smash voice every ~4s. The short crunch burst below
-    // still plays on EVERY hit for instant feedback.
-    if (this.sfxGapOk('smashVoice', 4000)) {
-      const smashClips = [AUDIO_PATHS.smash2, AUDIO_PATHS.smash1, AUDIO_PATHS.smash3];
-      const clip = smashClips[this.smashIndex % smashClips.length];
-      this.smashIndex += 1;
-      this.playMp3Clip(clip, 0.85, clip !== AUDIO_PATHS.smash2, false);
-    }
-
-    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
-    try {
-      const now = this.ctx.currentTime;
-      const bufSize = Math.floor(this.ctx.sampleRate * 0.24);
-      const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
-      const data = buf.getChannelData(0);
-      for (let i = 0; i < bufSize; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.32));
-      }
-      const noise = this.ctx.createBufferSource();
-      noise.buffer = buf;
-
-      const filter = this.ctx.createBiquadFilter();
-      filter.type = 'bandpass';
-      filter.frequency.value = 680;
-
-      const g = this.ctx.createGain();
-      g.gain.setValueAtTime(0.32, now);
-      g.gain.exponentialRampToValueAtTime(0.01, now + 0.24);
-
-      noise.connect(filter);
-      filter.connect(g);
-      g.connect(this.masterGain);
-      noise.start(now);
-
-      const chime = this.ctx.createOscillator();
-      const cg = this.ctx.createGain();
-      chime.type = 'sine';
-      chime.frequency.setValueAtTime(740, now + 0.04);
-      chime.frequency.exponentialRampToValueAtTime(1180, now + 0.18);
-      cg.gain.setValueAtTime(0.14, now + 0.04);
-      cg.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
-      chime.connect(cg);
-      cg.connect(this.masterGain);
-      chime.start(now + 0.04);
-      chime.stop(now + 0.23);
-    } catch {
-      // Ignore
-    }
+    if (!this.shouldPlayImpactSound()) return;
+    const smashClips = [AUDIO_PATHS.smash2, AUDIO_PATHS.smash1, AUDIO_PATHS.smash3];
+    const clip = smashClips[this.smashIndex % smashClips.length];
+    this.smashIndex += 1;
+    this.playMp3Clip(clip, 0.85, 75, 8000);
   }
 
   public playAccidentAnnouncement(): void {
@@ -441,189 +464,101 @@ export class GameAudio {
     if (nowMs - this.lastAnnouncementMs < 9500) return;
     this.lastAnnouncementMs = nowMs;
     this.announcementPlayedThisRide = true;
-    this.playMp3Clip(AUDIO_PATHS.accidentAnnouncement, 0.92, true, true);
+    this.playMp3Clip(AUDIO_PATHS.accidentAnnouncement, 0.92, 85, 8000);
   }
 
   /** Call when a new ride starts so one-shot sounds (accident announcement) can play again. */
   public resetRideAudio(): void {
     this.announcementPlayedThisRide = false;
     this.lastAnnouncementMs = 0;
+    this.impactCount = 0;
   }
 
   public playBigCrash(): void {
     this.setMusicMode('none');
-    this.playMp3Clip(AUDIO_PATHS.bigCrash, 0.95, true, true);
-
-    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
-    try {
-      const now = this.ctx.currentTime;
-      const bufSize = Math.floor(this.ctx.sampleRate * 0.6);
-      const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
-      const data = buf.getChannelData(0);
-      for (let i = 0; i < bufSize; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.28));
-      }
-      const noise = this.ctx.createBufferSource();
-      noise.buffer = buf;
-
-      const filter = this.ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.value = 480;
-
-      const g = this.ctx.createGain();
-      g.gain.setValueAtTime(0.45, now);
-      g.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
-
-      noise.connect(filter);
-      filter.connect(g);
-      g.connect(this.masterGain);
-      noise.start(now);
-
-      const thud = this.ctx.createOscillator();
-      const tg = this.ctx.createGain();
-      thud.type = 'sine';
-      thud.frequency.setValueAtTime(145, now);
-      thud.frequency.exponentialRampToValueAtTime(32, now + 0.44);
-      tg.gain.setValueAtTime(0.38, now);
-      tg.gain.exponentialRampToValueAtTime(0.001, now + 0.46);
-      thud.connect(tg);
-      tg.connect(this.masterGain);
-      thud.start(now);
-      thud.stop(now + 0.47);
-    } catch {
-      // Ignore
-    }
+    this.playMp3Clip(AUDIO_PATHS.bigCrash, 0.95, 100, 8000);
   }
 
   public playSlap(): void {
-    this.playMp3Clip(AUDIO_PATHS.slapReact, 0.95, true, true);
-
-    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
-    try {
-      const now = this.ctx.currentTime;
-      const bufSize = Math.floor(this.ctx.sampleRate * 0.14);
-      const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
-      const data = buf.getChannelData(0);
-      for (let i = 0; i < bufSize; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.16));
-      }
-      const noise = this.ctx.createBufferSource();
-      noise.buffer = buf;
-
-      const filter = this.ctx.createBiquadFilter();
-      filter.type = 'highpass';
-      filter.frequency.value = 900;
-
-      const g = this.ctx.createGain();
-      g.gain.setValueAtTime(0.58, now);
-      g.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
-
-      noise.connect(filter);
-      filter.connect(g);
-      g.connect(this.masterGain);
-      noise.start(now);
-    } catch {
-      // Ignore
-    }
+    this.playMp3Clip(AUDIO_PATHS.slapReact, 0.95, 90, 8000);
   }
 
   public playThud(): void {
-    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     // Scraping a wall fires this constantly — space the booms out a bit.
     if (!this.sfxGapOk('thud', 650)) return;
-
-    try {
-      const now = this.ctx.currentTime;
-      const o = this.ctx.createOscillator();
-      const g = this.ctx.createGain();
+    this.playProceduralSfx('thud', 0.14, (sfxGain, now) => {
+      const ctx = this.ctx;
+      if (!ctx) return;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
       o.type = 'sine';
       o.frequency.setValueAtTime(125, now);
       o.frequency.exponentialRampToValueAtTime(48, now + 0.12);
       g.gain.setValueAtTime(0.24, now);
       g.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
       o.connect(g);
-      g.connect(this.masterGain);
+      g.connect(sfxGain);
       o.start(now);
       o.stop(now + 0.14);
-    } catch {
-      // Ignore
-    }
+    }, 25);
   }
 
   public playPedHit(): void {
-    // The shocked voice line is dramatic — pace it; the synth blip below always plays.
-    if (this.sfxGapOk('pedHitVoice', 3000)) {
-      this.playMp3Clip(AUDIO_PATHS.pedHit, 0.88, true, false);
-    }
-
-    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
-    try {
-      const now = this.ctx.currentTime;
-      const o = this.ctx.createOscillator();
-      const g = this.ctx.createGain();
-      o.type = 'sine';
-      o.frequency.setValueAtTime(340, now);
-      o.frequency.exponentialRampToValueAtTime(150, now + 0.16);
-      g.gain.setValueAtTime(0.22, now);
-      g.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
-      o.connect(g);
-      g.connect(this.masterGain);
-      o.start(now);
-      o.stop(now + 0.18);
-    } catch {
-      // Ignore
-    }
+    if (!this.shouldPlayImpactSound()) return;
+    this.playMp3Clip(AUDIO_PATHS.pedHit, 0.88, 85, 6000);
   }
 
   public playViolation(): void {
-    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     if (!this.sfxGapOk('violation', 1500)) return;
-    try {
-      const now = this.ctx.currentTime;
-      const o = this.ctx.createOscillator();
-      const g = this.ctx.createGain();
+    this.playProceduralSfx('violation', 0.23, (sfxGain, now) => {
+      const ctx = this.ctx;
+      if (!ctx) return;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
       o.type = 'square';
       o.frequency.setValueAtTime(280, now);
       o.frequency.setValueAtTime(390, now + 0.08);
       g.gain.setValueAtTime(0.14, now);
       g.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
       o.connect(g);
-      g.connect(this.masterGain);
+      g.connect(sfxGain);
       o.start(now);
       o.stop(now + 0.23);
-    } catch {
-      // Ignore
-    }
+    }, 30);
   }
 
   public playRefuelTick(fuelPercent: number): void {
-    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
     const perfNow = performance.now();
-    if (perfNow - this.lastRefuelBeep < 180) return;
+    if (perfNow - this.lastRefuelBeep < 900) return;
     this.lastRefuelBeep = perfNow;
-
-    try {
-      const now = this.ctx.currentTime;
-      const o = this.ctx.createOscillator();
-      const g = this.ctx.createGain();
+    this.playProceduralSfx('refuelTick', 0.11, (sfxGain, now) => {
+      const ctx = this.ctx;
+      if (!ctx) return;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
       o.type = 'sine';
       o.frequency.setValueAtTime(360 + (fuelPercent / 100) * 420, now);
       g.gain.setValueAtTime(0.001, now);
       g.gain.exponentialRampToValueAtTime(0.13, now + 0.015);
       g.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
       o.connect(g);
-      g.connect(this.masterGain);
+      g.connect(sfxGain);
       o.start(now);
       o.stop(now + 0.11);
-    } catch {
-      // Ignore
-    }
+    }, 10, 1000);
+  }
+
+  /**
+   * Short voice line that plays once when the rider stops at a fuel pump and
+   * refueling begins. It is queued with priority over the recurring pump ticks.
+   */
+  public playFuelVoice(): void {
+    if (!this.sfxGapOk('fuelVoice', 4000)) return;
+    this.playMp3Clip(AUDIO_PATHS.fuelVoice, 0.95, 70, 8000);
   }
 
   public playTankFull(): void {
-    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
-    try {
-      const now = this.ctx.currentTime;
+    this.playProceduralSfx('tankFull', 0.34, (sfxGain, now) => {
       [523, 659, 784].forEach((freq, idx) => {
         const o = this.ctx!.createOscillator();
         const g = this.ctx!.createGain();
@@ -632,19 +567,15 @@ export class GameAudio {
         g.gain.setValueAtTime(0.18, now + idx * 0.07);
         g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.18);
         o.connect(g);
-        g.connect(this.masterGain!);
+        g.connect(sfxGain);
         o.start(now + idx * 0.07);
         o.stop(now + idx * 0.07 + 0.19);
       });
-    } catch {
-      // Ignore
-    }
+    }, 50, 5000);
   }
 
   public playShowroomOpen(): void {
-    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
-    try {
-      const now = this.ctx.currentTime;
+    this.playProceduralSfx('showroomOpen', 0.35, (sfxGain, now) => {
       [587.33, 880].forEach((freq, idx) => {
         const o = this.ctx!.createOscillator();
         const g = this.ctx!.createGain();
@@ -653,19 +584,15 @@ export class GameAudio {
         g.gain.setValueAtTime(0.16, now + idx * 0.09);
         g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + 0.25);
         o.connect(g);
-        g.connect(this.masterGain!);
+        g.connect(sfxGain);
         o.start(now + idx * 0.09);
         o.stop(now + idx * 0.09 + 0.26);
       });
-    } catch {
-      // Ignore
-    }
+    }, 30, 5000);
   }
 
   public playUpgradeFanfare(): void {
-    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
-    try {
-      const now = this.ctx.currentTime;
+    this.playProceduralSfx('upgradeFanfare', 0.7, (sfxGain, now) => {
       [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
         const o = this.ctx!.createOscillator();
         const g = this.ctx!.createGain();
@@ -674,41 +601,24 @@ export class GameAudio {
         g.gain.setValueAtTime(0.22, now + idx * 0.08);
         g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.34);
         o.connect(g);
-        g.connect(this.masterGain!);
+        g.connect(sfxGain);
         o.start(now + idx * 0.08);
         o.stop(now + idx * 0.08 + 0.36);
       });
-    } catch {
-      // Ignore
-    }
+    }, 40, 5000);
   }
 
   public playGameOver(): void {
     this.setMusicMode('none');
-    this.playMp3Clip(AUDIO_PATHS.gameOver, 0.92, true, true);
-
-    if (!this.ctx || !this.masterGain || this.sfxMuted) return;
-    try {
-      const now = this.ctx.currentTime;
-      [330, 294, 247, 196].forEach((freq, idx) => {
-        const o = this.ctx!.createOscillator();
-        const g = this.ctx!.createGain();
-        o.type = 'sawtooth';
-        o.frequency.setValueAtTime(freq, now + idx * 0.11);
-        g.gain.setValueAtTime(0.1, now + idx * 0.11);
-        g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.11 + 0.22);
-        o.connect(g);
-        g.connect(this.masterGain!);
-        o.start(now + idx * 0.11);
-        o.stop(now + idx * 0.11 + 0.23);
-      });
-    } catch {
-      // Ignore
-    }
+    this.playMp3Clip(AUDIO_PATHS.gameOver, 0.92, 100, 8000);
   }
 
   public dispose(): void {
     this.setMusicMode('none');
+    this.sfxQueue = [];
+    this.activeSfxClip?.pause();
+    this.activeSfxClip = null;
+    this.finishActiveSfx?.();
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     }

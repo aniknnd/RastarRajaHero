@@ -288,6 +288,9 @@ export const CORRIDOR_CONFIG = {
   TEJGAON_TURNOFF_Z: -1120,
   METRO_END_UTURN_Z: -1220,
 
+  // Downtown south/start-end wide U-turn turnaround (behind the spawn point)
+  DOWNTOWN_SOUTH_UTURN_Z: 20,
+
   // Tejgaon -> Mohakhali -> Banani -> Kuril -> Uttara North Highway Spine
   SPINE_X: 140,
   SPINE_HALF_WIDTH: 10.4, // x = 129.6..150.4
