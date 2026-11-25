@@ -243,9 +243,9 @@ export interface HudSnapshot {
 }
 
 export const GAME_CONFIG = {
-  LOOP_LENGTH: 720, // Metro start segment 9 blocks * 80m
+  LOOP_LENGTH: 960, // Extended downtown/city grid: 12 blocks * 80m
   BLOCK_LENGTH: 80,
-  BLOCK_COUNT: 9,
+  BLOCK_COUNT: 12,
   ARTERY_HALF_WIDTH: 9.6, // -9.6 to +9.6
   ARTERY_LANES: [-6.75, -3.25, 3.25, 6.75] as readonly number[], // Keep-left: -6.75/-3.25 go -Z; +3.25/+6.75 oncoming +Z
   AVENUE_LEFT_INNER_X: -34,
@@ -254,7 +254,7 @@ export const GAME_CONFIG = {
   AVENUE_RIGHT_OUTER_X: 62,
   WORLD_PERIMETER_X: 78,
   MEDIAN_HALF_WIDTH: 0.72,
-  INTERSECTION_Z_POSITIONS: [-200, -280, -520, -680] as readonly number[],
+  INTERSECTION_Z_POSITIONS: [-200, -280, -520, -680, -840, -920] as readonly number[],
   FUEL_PAD_HALF_LENGTH: 11.5,
   FUEL_REFILL_MAX_SPEED_KMH: 24,
   FUEL_REFILL_RATE_PER_SEC: 55,
@@ -961,4 +961,3 @@ export const REAL_TRAFFIC_SIGNS: readonly {
   { badge: '40', title: 'সর্বোচ্চ গতি ৪০', sub: 'হিরো বাইকারদের জন্য প্রযোজ্য নয়!', bg: '#ffffff', border: '#dc2626' },
   { badge: 'MRT-6', title: 'সামনে মেট্রো স্টেশন', sub: 'চলন্ত সিঁড়ি ও যাত্রী পারাপার', bg: '#065f46', border: '#4ade80' },
 ];
-

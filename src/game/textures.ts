@@ -69,6 +69,15 @@ export interface ProceduralTextureSet {
   routeBadgeUttara: THREE.CanvasTexture;
   routeBadge300ft: THREE.CanvasTexture;
   expresswayBillboards: THREE.CanvasTexture[];
+  bashundharaSigns: {
+    gate: THREE.CanvasTexture;
+    school: THREE.CanvasTexture;
+    mosque: THREE.CanvasTexture;
+    market: THREE.CanvasTexture;
+    sports: THREE.CanvasTexture;
+    lake: THREE.CanvasTexture;
+    sector: THREE.CanvasTexture;
+  };
   duckStallSign: THREE.CanvasTexture;
   baluBridgeSign: THREE.CanvasTexture;
   restaurantSigns: THREE.CanvasTexture[];
@@ -1570,6 +1579,45 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     ),
   ];
 
+  // 32b. Bashundhara Residential Area township signage (gate, amenities, sector boards)
+  const bashundharaSigns = {
+    gate: makeUTurnTex(
+      'বসুন্ধরা আবাসিক এলাকা • ৩০০ ফিট গেট',
+      'আধুনিক আবাসন, স্কুল, মসজিদ, লেক পার্ক ও স্পোর্টস সিটি',
+      '#1e3a8a'
+    ),
+    school: makeUTurnTex(
+      'বসুন্ধরা স্কুল এন্ড কলেজ',
+      'শিক্ষা • ক্রীড়া • সংস্কৃতি — সেক্টর ১ আবাসিক zone',
+      '#0f766e'
+    ),
+    mosque: makeUTurnTex(
+      'বসুন্ধরা কমিউনিটি মসজিদ',
+      'জামা-আদায় • ইসলামিক সেন্টার • সবুজ মসজিদ চত্বর',
+      '#065f46'
+    ),
+    market: makeUTurnTex(
+      'বসুন্ধরা শপিং কমপ্লেক্স',
+      'দৈনিক বাজার • বুটিক • ক্যাফে • সুবিধাজনক পার্কিং',
+      '#9a3412'
+    ),
+    sports: makeUTurnTex(
+      'বসুন্ধরা স্পোর্টস সিটি',
+      'ফুটবল মাঠ • রানিং ট্র্যাক • ক্রিকেট একাডেমি',
+      '#1d4ed8'
+    ),
+    lake: makeUTurnTex(
+      'বসুন্ধরা লেক পার্ক',
+      'হাঁটা পথ • বেঞ্চ • নৌকা • পরিবারের জন্য শান্ত জায়গা',
+      '#0e7490'
+    ),
+    sector: makeUTurnTex(
+      'বসুন্ধরা আবাসিক এলাকা',
+      'সেক্টর ১ • ২ • ৩ — বামে আবাসন, ডানে সুবিধা',
+      '#4338ca'
+    ),
+  };
+
   // 33. 300 Feet Duck Meat Stall Sign ("হাঁসের মাংস ও চিতই পিঠা")
   const duckStallSign = (() => {
     const [c, ctx] = makeCanvas(768, 224);
@@ -1764,6 +1812,7 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     routeBadgeUttara,
     routeBadge300ft,
     expresswayBillboards,
+    bashundharaSigns,
     duckStallSign,
     baluBridgeSign,
     restaurantSigns,

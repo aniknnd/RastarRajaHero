@@ -95,7 +95,7 @@ export interface DhakaWorld {
   isOnArterySidewalk: (x: number, z: number) => boolean;
 }
 
-export const GOLI_ALLEY_Z_POSITIONS: readonly number[] = [-80, -160, -320, -400, -480];
+export const GOLI_ALLEY_Z_POSITIONS: readonly number[] = [-80, -160, -320, -400, -480, -720, -800, -880];
 
 function wrapLoopDelta(targetZ: number, refZ: number): number {
   let d = targetZ - refZ;

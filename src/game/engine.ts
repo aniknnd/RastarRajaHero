@@ -427,6 +427,7 @@ export class HeroRastarEngine {
   private restRoomVisitedLock = false;
   private purbachalTurnBonusGiven = false;
   private uttaraTurnBonusGiven = false;
+  private bashundharaAreaBonusGiven = false;
   private milestone100kShown = false;
   private milestone200kShown = false;
   private bankSaveAccum = 0;
@@ -1488,6 +1489,7 @@ export class HeroRastarEngine {
     this.restRoomVisitedLock = false;
     this.purbachalTurnBonusGiven = false;
     this.uttaraTurnBonusGiven = false;
+    this.bashundharaAreaBonusGiven = false;
     this.bankSaveAccum = 0;
     this.score = 0;
     this.isNewBest = false;
@@ -2327,6 +2329,19 @@ export class HeroRastarEngine {
     this.currentCorridor = surface.corridor;
 
     // U-Turn Destination Bonuses (Purbachal 300ft End & Uttara End)
+    if (
+      !this.bashundharaAreaBonusGiven &&
+      this.currentCorridor === 'expressway300ft' &&
+      this.playerX >= 330 &&
+      this.playerX <= 410 &&
+      Math.abs(this.playerZ - CORRIDOR_CONFIG.EXPRESSWAY_Z) < 34
+    ) {
+      this.bashundharaAreaBonusGiven = true;
+      this.addPoints(100);
+      this.audio.playDing(this.combo);
+      this.flashScreen('green', 0.18);
+      this.pushPopup('বসুন্ধরা আবাসিক এলাকা!', 'আবাসিক সিটির প্রবেশগেট পার হয়েছেন • +100 pts', 'bonus');
+    }
     if (!this.purbachalTurnBonusGiven && this.playerX > CORRIDOR_CONFIG.PURBACHAL_UTURN_X - 35) {
       this.purbachalTurnBonusGiven = true;
       this.addPoints(400);
@@ -3992,6 +4007,7 @@ export class HeroRastarEngine {
       case 'connector':
         return 'তেজগাঁও লিংক রোড';
       case 'expressway300ft':
+        if (this.playerX >= 330 && this.playerX <= 650) return '৩০০ ফিট • বসুন্ধরা আবাসিক এলাকা';
         if (this.playerX > 2050) return '৩০০ ফিট • পূর্বাচল ইউ-টার্ন';
         if (Math.abs(this.playerX - CORRIDOR_CONFIG.NEELA_MARKET_X) < 130) return '৩০০ ফিট • নীলা মার্কেট';
         return '৩০০ ফিট • পূর্বাচল এক্সপ্রেসওয়ে';
@@ -4023,6 +4039,9 @@ export class HeroRastarEngine {
     if (this.currentCorridor === 'expressway300ft') {
       if (this.playerZ > CORRIDOR_CONFIG.EXPRESSWAY_Z) {
         return 'পশ্চিমে কুড়িল লোয়ার ফ্লাইওভার দিয়ে মহাখালী ফিরুন ⬅';
+      }
+      if (this.playerX >= 330 && this.playerX <= 650) {
+        return 'বসুন্ধরা আবাসিক এলাকা • সামনে নীলা মার্কেট ও রেস্ট রুম';
       }
       if (this.playerX < CORRIDOR_CONFIG.NEELA_SHOWROOM_X - 90) {
         return 'সামনে নীলা মার্কেট: হিরো শোরুম ও রেস্ট রুম';

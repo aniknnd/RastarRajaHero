@@ -638,6 +638,334 @@ function makePalm(scale = 1): THREE.Group {
   return tree;
 }
 
+/**
+ * Bashundhara Residential Area (Bashundhara R/A & Sports City) on the 300ft corridor.
+ * A compact but complete gated township: entrance plaza, internal streets, apartment
+ * clusters on both sides of the expressway, a school, mosque, shopping complex,
+ * lake park and sports ground, plus trees, lamps and Bengali wayfinding signage.
+ * Everything is placed at least ~25 m clear of the carriageway so it never blocks
+ * the road and reads clearly from the chase camera.
+ */
+function buildBashundharaTownship(textures: ProceduralTextureSet): {
+  group: THREE.Group;
+  solidBuildings: CorridorSolidBox[];
+} {
+  const group = new THREE.Group();
+  const solidBuildings: CorridorSolidBox[] = [];
+  const Z0 = CORRIDOR_CONFIG.EXPRESSWAY_Z;
+  const X_MIN = 300;
+  const X_MAX = 710;
+
+  // Deterministic layout so the skyline is identical on every load.
+  let seed = 0x42415348; // "BASH"
+  const rnd = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  const jitter = (a: number, b: number) => a + rnd() * (b - a);
+
+  // Materials tuned for high visibility.
+  const roadMat = new THREE.MeshStandardMaterial({ map: textures.cityRoad, roughness: 0.88, metalness: 0.03 });
+  const paveMat = new THREE.MeshStandardMaterial({ map: textures.sidewalk, roughness: 0.85 });
+  const grassMat = new THREE.MeshStandardMaterial({ color: 0x2f8f3a, roughness: 0.95 });
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xe8dfcf, roughness: 0.86 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.5, metalness: 0.22 });
+  const glassMat = new THREE.MeshStandardMaterial({
+    color: 0x38bdf8,
+    roughness: 0.16,
+    metalness: 0.28,
+    emissive: 0x0c4a6e,
+    emissiveIntensity: 0.55,
+  });
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0xfde68a });
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.7, roughness: 0.4 });
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.92 });
+  const canopyMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.86 });
+  const accentMat = new THREE.MeshStandardMaterial({ color: 0xfde047, roughness: 0.4, metalness: 0.3 });
+  const gateMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4, metalness: 0.3 });
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.7 });
+
+  const addFlat = (w: number, d: number, mat: THREE.Material, x: number, z: number, y = 0.018) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(x, y, z);
+    m.receiveShadow = true;
+    group.add(m);
+    return m;
+  };
+
+  const addTree = (x: number, z: number, scale = 1) => {
+    const t = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16 * scale, 0.24 * scale, 2.4 * scale, 6), trunkMat);
+    trunk.position.y = 1.2 * scale;
+    t.add(trunk);
+    const crown = new THREE.Mesh(new THREE.ConeGeometry(1.55 * scale, 3.6 * scale, 7), canopyMat);
+    crown.position.y = 3.25 * scale;
+    crown.castShadow = true;
+    t.add(crown);
+    t.position.set(x, 0, z);
+    group.add(t);
+  };
+
+  const addLamp = (x: number, z: number, dir: -1 | 1) => {
+    const l = new THREE.Group();
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.14, 5.4, 7), poleMat);
+    pole.position.y = 2.7;
+    l.add(pole);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 0.1), poleMat);
+    arm.position.set(dir * 0.7, 5.35, 0);
+    l.add(arm);
+    const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.14, 0.45), glowMat);
+    bulb.position.set(dir * 1.42, 5.2, 0);
+    l.add(bulb);
+    l.position.set(x, 0, z);
+    group.add(l);
+  };
+
+  const addSign = (x: number, z: number, tex: THREE.CanvasTexture, yaw: number, scale = 1) => {
+    const s = new THREE.Group();
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 2.6, 6), poleMat);
+    post.position.y = 1.3;
+    s.add(post);
+    const board = new THREE.Mesh(new THREE.BoxGeometry(6 * scale, 1.65 * scale, 0.16), new THREE.MeshBasicMaterial({ map: tex }));
+    board.position.y = 3.15;
+    s.add(board);
+    s.position.set(x, 0, z);
+    s.rotation.y = yaw;
+    group.add(s);
+  };
+
+  const addTower = (
+    x: number,
+    z: number,
+    w: number,
+    h: number,
+    d: number,
+    facadeIdx: number,
+    id: string
+  ) => {
+    const t = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, d),
+      new THREE.MeshStandardMaterial({
+        map: textures.buildingFacades[facadeIdx % textures.buildingFacades.length],
+        roughness: 0.62,
+        metalness: 0.1,
+      })
+    );
+    body.position.y = h * 0.5;
+    body.castShadow = true;
+    body.receiveShadow = true;
+    t.add(body);
+
+    const podium = new THREE.Mesh(new THREE.BoxGeometry(w + 2.6, 3.4, d + 2.6), wallMat);
+    podium.position.y = 1.7;
+    podium.receiveShadow = true;
+    t.add(podium);
+
+    for (const s of [-1, 1] as const) {
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, h * 0.76, 0.22), glassMat);
+      glass.position.set(0, h * 0.54, s * (d * 0.5 + 0.13));
+      t.add(glass);
+      const floors = Math.max(3, Math.floor(h / 6));
+      for (let f = 1; f < floors; f++) {
+        const band = new THREE.Mesh(new THREE.BoxGeometry(w * 0.76, 0.16, 0.42), trimMat);
+        band.position.set(0, f * 6, s * (d * 0.5 + 0.21));
+        t.add(band);
+      }
+    }
+
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.7, 0.55, d + 0.7), trimMat);
+    roof.position.y = h + 0.28;
+    t.add(roof);
+
+    t.position.set(x, 0, z);
+    group.add(t);
+    solidBuildings.push({
+      id,
+      minX: x - w * 0.5 - 1,
+      maxX: x + w * 0.5 + 1,
+      minZ: z - d * 0.5 - 1,
+      maxZ: z + d * 0.5 + 1,
+    });
+  };
+
+  // =========================================================================
+  // MONUMENTAL ENTRY GATE at x=360 — spans over the expressway so it cannot be missed.
+  // Two tall pylons flank the road; a bright arch beam crosses high above it.
+  // =========================================================================
+  const GATE_X = 360;
+  const GATE_H = 14;
+  const GATE_SPAN_Z = 56; // clear of both carriageways
+
+  // South pylon (z = Z0 + 28)
+  const southPylon = new THREE.Mesh(new THREE.BoxGeometry(6, GATE_H, 6), gateMat);
+  southPylon.position.set(GATE_X, GATE_H * 0.5, Z0 + 28);
+  southPylon.castShadow = true;
+  group.add(southPylon);
+  const southCap = new THREE.Mesh(new THREE.BoxGeometry(8, 1.2, 8), accentMat);
+  southCap.position.set(GATE_X, GATE_H + 0.6, Z0 + 28);
+  group.add(southCap);
+  const southGlobe = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 10), glowMat);
+  southGlobe.position.set(GATE_X, GATE_H + 1.6, Z0 + 28);
+  group.add(southGlobe);
+
+  // North pylon (z = Z0 - 28)
+  const northPylon = new THREE.Mesh(new THREE.BoxGeometry(6, GATE_H, 6), gateMat);
+  northPylon.position.set(GATE_X, GATE_H * 0.5, Z0 - 28);
+  northPylon.castShadow = true;
+  group.add(northPylon);
+  const northCap = new THREE.Mesh(new THREE.BoxGeometry(8, 1.2, 8), accentMat);
+  northCap.position.set(GATE_X, GATE_H + 0.6, Z0 - 28);
+  group.add(northCap);
+  const northGlobe = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 10), glowMat);
+  northGlobe.position.set(GATE_X, GATE_H + 1.6, Z0 - 28);
+  group.add(northGlobe);
+
+  // Arch beam spanning across the road at high clearance.
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.6, GATE_SPAN_Z + 4), accentMat);
+  beam.position.set(GATE_X, GATE_H + 2.6, Z0);
+  beam.castShadow = true;
+  group.add(beam);
+  const beamTop = new THREE.Mesh(new THREE.BoxGeometry(3, 1, GATE_SPAN_Z + 4), gateMat);
+  beamTop.position.set(GATE_X, GATE_H + 4.0, Z0);
+  group.add(beamTop);
+
+  // Two narrow pylon collision boxes at the sides of the road — the beam itself
+  // spans overhead (16.6 m high) so riders drive cleanly under it.
+  const pylonBox = (pz: number) => {
+    solidBuildings.push({
+      id: `Bashundhara_pylon_${pz}`,
+      minX: GATE_X - 4,
+      maxX: GATE_X + 4,
+      minZ: pz - 4,
+      maxZ: pz + 4,
+    });
+  };
+  pylonBox(Z0 + 28);
+  pylonBox(Z0 - 28);
+
+  // =========================================================================
+  // HUGE WELCOME BILLBOARDS flanking the gate — visible from hundreds of meters.
+  // =========================================================================
+  for (const side of [-1, 1] as const) {
+    const board = buildExpresswayBillboard(textures.expresswayBillboards[0]);
+    board.position.set(GATE_X + side * 22, 0, Z0 + side * 30);
+    board.rotation.y = -Math.PI / 2;
+    board.scale.setScalar(1.6);
+    group.add(board);
+    solidBuildings.push({
+      id: `Bashundhara_board_${side}`,
+      minX: GATE_X + side * 22 - 12,
+      maxX: GATE_X + side * 22 + 12,
+      minZ: Z0 + side * 30 - 8,
+      maxZ: Z0 + side * 30 + 8,
+    });
+  }
+
+  // =========================================================================
+  // TALL DENSE SKYLINE — clustered apartments on both sides of the road so
+  // they read as a city, not isolated towers. Heights 40–80 m.
+  // =========================================================================
+  const cols = [330, 390, 450, 510, 570, 630, 690];
+  for (const side of [-1, 1] as const) {
+    // Near row (z = Z0 +/- 42): tallest, closest to road — forms the skyline wall.
+    for (const x of cols) {
+      addTower(x, Z0 + side * 42, 20, rnd() < 0.5 ? 64 : 52, 16, Math.floor(rnd() * textures.buildingFacades.length), `Bashundhara_near_${side}_${x}`);
+    }
+    // Mid row (z = Z0 +/- 90): medium height.
+    for (const x of cols) {
+      addTower(x, Z0 + side * 90, 18, rnd() < 0.5 ? 44 : 36, 14, Math.floor(rnd() * textures.buildingFacades.length), `Bashundhara_mid_${side}_${x}`);
+    }
+    // Back row (z = Z0 +/- 140): shorter, sparser.
+    for (const x of cols) {
+      if (rnd() < 0.4) continue;
+      addTower(x, Z0 + side * 140, 16, rnd() < 0.5 ? 30 : 24, 12, Math.floor(rnd() * textures.buildingFacades.length), `Bashundhara_back_${side}_${x}`);
+    }
+
+    // Street lamps along the internal boulevards.
+    for (let x = X_MIN + 20; x <= X_MAX - 20; x += 40) {
+      addLamp(x, Z0 + side * 63, side === 1 ? -1 : 1);
+    }
+    // Trees along the sidewalk edge nearest the highway.
+    for (let x = X_MIN + 16; x <= X_MAX - 16; x += 34) {
+      addTree(x, Z0 + side * 24, jitter(0.9, 1.2));
+    }
+  }
+
+  const addAmenity = (
+    x: number,
+    z: number,
+    w: number,
+    h: number,
+    d: number,
+    tex: THREE.CanvasTexture,
+    roofColor: number,
+    id: string
+  ) => {
+    const b = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+    body.position.y = h * 0.5;
+    body.castShadow = true;
+    body.receiveShadow = true;
+    b.add(body);
+    const windows = new THREE.Mesh(new THREE.BoxGeometry(w * 0.86, h * 0.5, 0.24), glassMat);
+    windows.position.set(0, h * 0.62, d * 0.5 + 0.14);
+    b.add(windows);
+    const roof = new THREE.Mesh(
+      new THREE.BoxGeometry(w + 1, 0.7, d + 1),
+      new THREE.MeshStandardMaterial({ color: roofColor, roughness: 0.65 })
+    );
+    roof.position.y = h + 0.35;
+    b.add(roof);
+    const sign = new THREE.Mesh(
+      new THREE.BoxGeometry(Math.min(w * 0.9, 16), 2.2, 0.24),
+      new THREE.MeshBasicMaterial({ map: tex })
+    );
+    sign.position.set(0, h + 2.0, d * 0.5 + 0.18);
+    b.add(sign);
+    b.position.set(x, 0, z);
+    group.add(b);
+    solidBuildings.push({
+      id,
+      minX: x - w * 0.5 - 1,
+      maxX: x + w * 0.5 + 1,
+      minZ: z - d * 0.5 - 1,
+      maxZ: z + d * 0.5 + 1,
+    });
+  };
+
+  // =========================================================================
+  // Civic landmarks with big signs — mosque (green dome), school, market.
+  // =========================================================================
+  addAmenity(420, Z0 - 88, 44, 15, 26, textures.bashundharaSigns.school, 0x0f766e, 'Bashundhara_school');
+  addAmenity(570, Z0 - 88, 30, 14, 26, textures.bashundharaSigns.mosque, 0x065f46, 'Bashundhara_mosque');
+  addAmenity(470, Z0 + 88, 46, 14, 26, textures.bashundharaSigns.market, 0x9a3412, 'Bashundhara_market');
+
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(5.4, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), new THREE.MeshStandardMaterial({ color: 0x0f9b6c, roughness: 0.35, metalness: 0.2 }));
+  dome.position.set(570, 13, Z0 - 88);
+  dome.castShadow = true;
+  group.add(dome);
+  const finial = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 2.4, 8), trimMat);
+  finial.position.set(570, 19.6, Z0 - 88);
+  group.add(finial);
+  for (const dx of [-11, 11]) {
+    const minaret = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.35, 24, 10), wallMat);
+    minaret.position.set(570 + dx, 12, Z0 - 96);
+    group.add(minaret);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(1.6, 3.2, 10), new THREE.MeshStandardMaterial({ color: 0x0f9b6c, roughness: 0.35, metalness: 0.2 }));
+    cap.position.set(570 + dx, 25.6, Z0 - 96);
+    group.add(cap);
+  }
+
+  // Sector direction boards along the approach.
+  for (const lx of [445, 545, 645]) {
+    addSign(lx, Z0 - 24, textures.bashundharaSigns.sector, -Math.PI / 2, 1.1);
+  }
+
+  return { group, solidBuildings };
+}
+
 export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): ExpandedCorridorsResult {
   const root = new THREE.Group();
   const chunks: WorldChunk[] = [];
@@ -1501,18 +1829,6 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
       isResort: boolean;
     }[] = [
       {
-        id: 'bashundhara_tower',
-        x: 390,
-        side: -1,
-        offsetZ: -44,
-        w: 18,
-        h: 34,
-        d: 14,
-        facadeIdx: 0,
-        signTex: textures.expresswayBillboards[0],
-        isResort: false,
-      },
-      {
         id: 'rickshaw_cafe_spot',
         x: 640,
         side: 1,
@@ -1597,6 +1913,14 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
     g.add(purbachalU);
 
     registerChunk('exp300_landmarks_outer', 1350, CORRIDOR_CONFIG.EXPRESSWAY_Z, 1020, g);
+  }
+
+  // Bashundhara Residential Area: a dedicated chunk centred on the township itself,
+  // so the whole city culls in together as the rider approaches the 300ft entry gate.
+  {
+    const township = buildBashundharaTownship(textures);
+    solidBuildings.push(...township.solidBuildings);
+    registerChunk('bashundhara_residential_area', 505, CORRIDOR_CONFIG.EXPRESSWAY_Z, 260, township.group);
   }
 
   // Neela Market Hub Chunk: Market Stalls + Signature Duck Meat Stalls + Hero Motors Showroom + Bikers Rest Room
