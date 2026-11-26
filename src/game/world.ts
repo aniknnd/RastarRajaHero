@@ -1065,7 +1065,7 @@ export function buildDhakaWorld(textures: ProceduralTextureSet): DhakaWorld {
     }
 
     // 2. Tejgaon -> Uttara Spine Sidewalks (x = 140 ± [10.55 .. 13.4]; South & Uttara U-turn plazas open)
-    if (z <= -1070 && z >= -3650 && Math.abs(x - CORRIDOR_CONFIG.SPINE_X) < 16) {
+    if (z <= -1070 && z >= CORRIDOR_CONFIG.UTTARA_UTURN_Z + 30 && Math.abs(x - CORRIDOR_CONFIG.SPINE_X) < 16) {
       const relX = x - CORRIDOR_CONFIG.SPINE_X;
       const absRelX = Math.abs(relX);
       if (absRelX < CORRIDOR_CONFIG.SPINE_HALF_WIDTH + 0.15 || absRelX > CORRIDOR_CONFIG.SPINE_HALF_WIDTH + 3.0) {

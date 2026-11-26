@@ -56,6 +56,7 @@ export interface ProceduralTextureSet {
   trafficControlSigns: THREE.CanvasTexture[];
   accidentSloganSign: THREE.CanvasTexture;
   tejgaonTurnBillboard: THREE.CanvasTexture;
+  mohakhaliBusTerminal: THREE.CanvasTexture;
   kurilSplitGantry: THREE.CanvasTexture;
   expresswayRoad: THREE.CanvasTexture;
   canalWater: THREE.CanvasTexture;
@@ -1122,6 +1123,36 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     return track(finalizeColorTexture(c, aniso));
   })();
 
+  // 21b. Mohakhali Bus Terminal Billboard ("মহাখালী বাস টার্মিনাল")
+  const mohakhaliBusTerminal = (() => {
+    const [c, ctx] = makeCanvas(1024, 384);
+    ctx.fillStyle = '#0c4a6e';
+    ctx.fillRect(0, 0, 1024, 384);
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 14;
+    ctx.strokeRect(10, 10, 1004, 364);
+
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(28, 28, 968, 78);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#0c4a6e';
+    ctx.font = 'bold 40px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('ঢাকা পরিবহন  •  বাস কাউন্টার ১-৮', 512, 67);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 82px "Noto Sans Bengali", sans-serif';
+    ctx.fillText('মহাখালী বাস টার্মিনাল', 512, 185);
+
+    ctx.fillStyle = '#bae6fd';
+    ctx.font = 'bold 34px "Noto Sans Bengali", "Chakra Petch", sans-serif';
+    ctx.fillText('গুলশান · বনানী · উত্তরা · বিমানবন্দর', 512, 275);
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 26px "Chakra Petch", sans-serif';
+    ctx.fillText('MOHAKHALI BUS TERMINAL  •  COUNTERS 1-8', 512, 330);
+    return track(finalizeColorTexture(c, aniso));
+  })();
+
   // 22. Kuril Interchange Split Gantry ("⬆ উত্তরা  |  ৩০০ ফিট ➡")
   const kurilSplitGantry = (() => {
     const [c, ctx] = makeCanvas(1024, 320);
@@ -1799,6 +1830,7 @@ export function createProceduralTextures(renderer: THREE.WebGLRenderer): Procedu
     trafficControlSigns,
     accidentSloganSign,
     tejgaonTurnBillboard,
+    mohakhaliBusTerminal,
     kurilSplitGantry,
     expresswayRoad,
     canalWater,

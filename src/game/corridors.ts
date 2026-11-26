@@ -16,6 +16,7 @@ import {
   buildTejgaonTurnBillboard,
   buildTongStall,
   buildTrafficLight,
+  buildTrafficVehicle,
   buildUTurnSignArch,
   type ShowroomAttendantRig,
   type TrafficLightRig,
@@ -49,6 +50,7 @@ export interface CorridorSurfaceSample {
   pitchRad: number;
   onFlyover: boolean;
   corridor: CorridorId;
+  deckId: string | null;
 }
 
 export interface RestRoomNode {
@@ -242,7 +244,12 @@ function getCorridorIdAt(x: number, z: number): CorridorId {
   return 'uttara';
 }
 
-function evalRawHeightAt(x: number, z: number, prevY: number): { y: number; onFlyover: boolean; flyoverId?: FlyoverEval['id'] } {
+function evalRawHeightAt(
+  x: number,
+  z: number,
+  prevY: number,
+  deckLock?: string | null
+): { y: number; onFlyover: boolean; flyoverId?: FlyoverEval['id'] } {
   const candidates: FlyoverEval[] = [];
 
   const mohaY = evalStraightZFlyover(
@@ -274,6 +281,24 @@ function evalRawHeightAt(x: number, z: number, prevY: number): { y: number; onFl
     candidates.push(kc);
   }
 
+  // Sticky deck lock: a vehicle already on a flyover deck stays locked to THAT
+  // deck until the deck surface returns to ~ground at its far touchdown. This
+  // prevents a flyover rider from being yanked onto the ground (or another deck)
+  // mid-span, and — crucially — stops ground traffic passing UNDER a low ramp
+  // from snapping UP onto it (the cause of unfair flyover collisions).
+  if (deckLock) {
+    const locked = candidates.find((c) => c.id === deckLock);
+    if (locked) {
+      // Stay on the locked deck while its surface is still meaningfully elevated,
+      // OR while the ramp foot is within a small step of the current height.
+      if (locked.y > 0.35 || Math.abs(locked.y - prevY) <= 1.85) {
+        return { y: locked.y, onFlyover: locked.y > 0.15, flyoverId: locked.id };
+      }
+      // Deck has returned to ground at touchdown → release the lock below.
+    }
+    // Locked deck no longer under us (drove off the end) → fall through to normal logic.
+  }
+
   if (candidates.length > 0) {
     let best = candidates[0];
     for (let i = 1; i < candidates.length; i++) {
@@ -281,8 +306,18 @@ function evalRawHeightAt(x: number, z: number, prevY: number): { y: number; onFl
         best = candidates[i];
       }
     }
-    // Unified height-proximity lock: attaches smoothly at ramp entry and stays locked to the matching deck
-    // without snapping across Lower (5.2m), Upper (10.6m), or ground (0m).
+    // A ground vehicle (prevY ≈ 0, no deck lock) may only mount a flyover at the
+    // very FOOT of the ramp (height ≤ 0.6m). This is the key fix: the old 1.85m
+    // threshold let ground cars snap onto the low ramp (1–1.8m) and then collide
+    // with the player legitimately riding up the flyover.
+    if (!deckLock && prevY < 0.3) {
+      if (best.y <= 0.6) {
+        return { y: best.y, onFlyover: best.y > 0.15, flyoverId: best.id };
+      }
+      // Low ramp is above the mounting threshold → stay on the ground underneath.
+      return { y: 0, onFlyover: false };
+    }
+    // Already airborne/on a ramp: use the height-proximity lock to stay attached.
     if (Math.abs(best.y - prevY) <= 1.85) {
       return { y: best.y, onFlyover: best.y > 0.15, flyoverId: best.id };
     }
@@ -296,11 +331,12 @@ export function sampleDhakaSurface(
   z: number,
   prevY: number,
   fwdX = 0,
-  fwdZ = -1
+  fwdZ = -1,
+  deckLock?: string | null
 ): CorridorSurfaceSample {
-  const cur = evalRawHeightAt(x, z, prevY);
-  const ahead = evalRawHeightAt(x + fwdX * 0.85, z + fwdZ * 0.85, cur.y);
-  const behind = evalRawHeightAt(x - fwdX * 0.85, z - fwdZ * 0.85, cur.y);
+  const cur = evalRawHeightAt(x, z, prevY, deckLock);
+  const ahead = evalRawHeightAt(x + fwdX * 0.85, z + fwdZ * 0.85, cur.y, cur.flyoverId ?? null);
+  const behind = evalRawHeightAt(x - fwdX * 0.85, z - fwdZ * 0.85, cur.y, cur.flyoverId ?? null);
   const pitchRad = Math.atan2(ahead.y - behind.y, 1.7);
 
   return {
@@ -308,6 +344,7 @@ export function sampleDhakaSurface(
     pitchRad: THREE.MathUtils.clamp(pitchRad, -0.32, 0.32),
     onFlyover: cur.onFlyover,
     corridor: cur.onFlyover && cur.flyoverId ? cur.flyoverId : getCorridorIdAt(x, z),
+    deckId: cur.onFlyover && cur.flyoverId ? cur.flyoverId : null,
   };
 }
 
@@ -330,15 +367,15 @@ const GROUND_DRIVABLE_RECTS: readonly DrivableRect[] = [
   // Tejgaon East Connector Link Road (z: -1131 .. -1109, x: 0 .. 150)
   { minX: 0, maxX: 150, minZ: -1131, maxZ: -1109 },
   // Tejgaon -> Mohakhali -> Banani -> Kuril -> Uttara North Highway Spine (includes west showroom/pump bays)
-  { minX: 126.4, maxX: 152.0, minZ: -3736, maxZ: -1006 },
+  { minX: 126.4, maxX: 152.0, minZ: CORRIDOR_CONFIG.SPINE_MIN_Z + 4, maxZ: -1006 },
   // Tejgaon South U-Turn Turnaround Plaza
   { minX: 124, maxX: 156, minZ: -1062, maxZ: -1006 },
   // Uttara Wide U-Turn Turnaround Plaza
-  { minX: 124, maxX: 156, minZ: -3736, maxZ: -3635 },
+  { minX: 124, maxX: 156, minZ: CORRIDOR_CONFIG.SPINE_MIN_Z + 4, maxZ: CORRIDOR_CONFIG.UTTARA_UTURN_Z + 45 },
   // 300 Feet South Outbound Carriageway (Eastbound) + Service Edge
-  { minX: 140, maxX: 2236, minZ: -2916.4, maxZ: -2896.5 },
+  { minX: 140, maxX: CORRIDOR_CONFIG.EXPRESSWAY_MAX_X - 4, minZ: -2916.4, maxZ: -2896.5 },
   // 300 Feet North Inbound Carriageway (Westbound) + Service Edge
-  { minX: 140, maxX: 2236, minZ: -2943.5, maxZ: -2923.6 },
+  { minX: 140, maxX: CORRIDOR_CONFIG.EXPRESSWAY_MAX_X - 4, minZ: -2943.5, maxZ: -2923.6 },
   // Kuril Flyover Approach & Return Slip Plaza (z: -2765 .. -2685, x: 129.2 .. 175.0)
   { minX: 129.2, maxX: 175.0, minZ: -2765, maxZ: -2685 },
   // Kuril Ground Junction Plaza (connects Spine & 300ft)
@@ -347,8 +384,8 @@ const GROUND_DRIVABLE_RECTS: readonly DrivableRect[] = [
   { minX: 778, maxX: 818, minZ: -2941, maxZ: -2899 },
   // Neela Market Canal Crossing Bridge (x ~ 1380)
   { minX: 1356, maxX: 1404, minZ: -2941, maxZ: -2899 },
-  // Purbachal End U-Turn Loop Bridge (x: 2105 .. 2236)
-  { minX: 2105, maxX: 2236, minZ: -2942, maxZ: -2898 },
+  // Purbachal End U-Turn Loop Bridge
+  { minX: CORRIDOR_CONFIG.PURBACHAL_UTURN_X - 65, maxX: CORRIDOR_CONFIG.EXPRESSWAY_MAX_X - 4, minZ: -2942, maxZ: -2898 },
 ];
 
 export function clampToDrivableCorridors(
@@ -1293,7 +1330,7 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
   // 3. TEJGAON -> MOHAKHALI -> BANANI -> KURIL -> UTTARA SPINE (x = 140, z = -1020..-3740)
   // =========================================================================
   const spineBlockLen = 80;
-  for (let zStart = -1020; zStart > -3740; zStart -= spineBlockLen) {
+  for (let zStart = -1020; zStart > CORRIDOR_CONFIG.SPINE_MIN_Z; zStart -= spineBlockLen) {
     const baseZ = zStart - spineBlockLen / 2;
     const g = new THREE.Group();
     g.position.set(CORRIDOR_CONFIG.SPINE_X, 0, baseZ);
@@ -1304,7 +1341,7 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
     // Sidewalks flanking spine (open at Tejgaon connector z=-1120, Kuril slip/300ft z=-2660..-2980, & U-Turn loops)
     const openWest = Math.abs(baseZ - CORRIDOR_CONFIG.TEJGAON_TURNOFF_Z) < 42;
     const openEast = baseZ <= -2660 && baseZ >= -2980;
-    const isUTurnBlock = baseZ > -1070 || baseZ < -3650;
+    const isUTurnBlock = baseZ > -1070 || baseZ < CORRIDOR_CONFIG.UTTARA_UTURN_Z + 30;
     const skipShowroomWest =
       Math.abs(baseZ - CORRIDOR_CONFIG.TEJGAON_SHOWROOM_Z) < 35 ||
       Math.abs(baseZ - CORRIDOR_CONFIG.UTTARA_SHOWROOM_Z) < 35;
@@ -1328,7 +1365,7 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
       (baseZ < -1760 && baseZ > -2040) ||
       (baseZ < -2400 && baseZ > -2700) ||
       (baseZ < -2740 && baseZ > -2960) ||
-      baseZ < -3620 ||
+      baseZ < CORRIDOR_CONFIG.UTTARA_UTURN_Z + 60 ||
       Math.abs(baseZ - CORRIDOR_CONFIG.TEJGAON_TURNOFF_Z) < 45;
     if (!nearFlyoverOrTurn) {
       for (let mz = -30; mz <= 30; mz += 20) {
@@ -1341,10 +1378,12 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
     // Roadside buildings & streetlamps (skip around U-turn plazas & Kuril Flyover Interchange!)
     for (const slotZ of [-22, 22]) {
       const worldZ = baseZ + slotZ;
-      if (worldZ > -1068 || worldZ < -3640) continue;
+      if (worldZ > -1068 || worldZ < CORRIDOR_CONFIG.UTTARA_UTURN_Z + 40) continue;
       for (const side of [-1, 1]) {
         if (side === -1 && Math.abs(worldZ - CORRIDOR_CONFIG.TEJGAON_TURNOFF_Z) < 32) continue;
         if (side === 1 && worldZ <= -2670 && worldZ >= -2980) continue;
+        // Reserve the east side around the Mohakhali Bus Terminal for the terminal scene
+        if (side === 1 && Math.abs(worldZ - CORRIDOR_CONFIG.MOHAKHALI_BUS_TERMINAL_Z) < 52) continue;
         if (
           side === -1 &&
           (Math.abs(worldZ - CORRIDOR_CONFIG.TEJGAON_SHOWROOM_Z) < 24 ||
@@ -1494,14 +1533,84 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
       uturnPad.position.set(CORRIDOR_CONFIG.SPINE_X, 0.022, CORRIDOR_CONFIG.UTTARA_UTURN_Z - 14);
       g.add(uturnPad);
       const uttaraEndWall = new THREE.Mesh(new THREE.BoxGeometry(38, 1.1, 1.2), chevronRedMat);
-      uttaraEndWall.position.set(CORRIDOR_CONFIG.SPINE_X, 0.55, -3738);
+      uttaraEndWall.position.set(CORRIDOR_CONFIG.SPINE_X, 0.55, CORRIDOR_CONFIG.UTTARA_UTURN_Z - 58);
       g.add(uttaraEndWall);
 
       const tong = buildTongStall(textures, 2);
       tong.position.set(CORRIDOR_CONFIG.SPINE_X + 13.5, 0.08, -1350);
       g.add(tong);
 
-      registerChunk('spine_gantries_uturn', CORRIDOR_CONFIG.SPINE_X, -2380, 1550, g);
+      // Chunk spans from the Tejgaon gantries down to the far Uttara U-Turn end.
+      const spineLandmarkCenterZ = (-1048 + (CORRIDOR_CONFIG.UTTARA_UTURN_Z - 58)) / 2;
+      const spineLandmarkHalf = Math.abs(-1048 - (CORRIDOR_CONFIG.UTTARA_UTURN_Z - 58)) / 2 + 60;
+      registerChunk('spine_gantries_uturn', CORRIDOR_CONFIG.SPINE_X, spineLandmarkCenterZ, spineLandmarkHalf, g);
+    }
+
+    // Mohakhali Bus Terminal scene (east side of spine, z ~ -1670): terminal
+    // building, big billboard sign, canopy, and parked player buses (Nitol/BRTC/Hanif).
+    {
+      const g = new THREE.Group();
+      const termZ = CORRIDOR_CONFIG.MOHAKHALI_BUS_TERMINAL_Z; // -1670
+      const termX = CORRIDOR_CONFIG.SPINE_X + 30; // east of the spine roadway
+
+      // Terminal main building (wide, low-rise with glass frontage)
+      const termBody = new THREE.Mesh(
+        new THREE.BoxGeometry(30, 8.5, 40),
+        new THREE.MeshStandardMaterial({
+          map: textures.buildingFacades[2 % textures.buildingFacades.length],
+          roughness: 0.7,
+          metalness: 0.05,
+        })
+      );
+      termBody.position.set(termX + 6, 4.25, termZ);
+      termBody.castShadow = true;
+      termBody.receiveShadow = true;
+      g.add(termBody);
+
+      // Flat roof parapet
+      const termRoof = new THREE.Mesh(
+        new THREE.BoxGeometry(31, 0.6, 41),
+        new THREE.MeshStandardMaterial({ color: 0xe7e5e4, roughness: 0.8 })
+      );
+      termRoof.position.set(termX + 6, 8.8, termZ);
+      g.add(termRoof);
+
+      // Big terminal billboard facing the road (west-facing)
+      const billboard = buildTejgaonTurnBillboard(textures.mohakhaliBusTerminal);
+      billboard.rotation.y = -Math.PI / 2; // face toward the roadway (−X)
+      billboard.position.set(CORRIDOR_CONFIG.SPINE_X + 13.2, 0, termZ + 24);
+      g.add(billboard);
+
+      // Boarding canopy over the bus bays (between building and road)
+      const canopy = new THREE.Mesh(
+        new THREE.BoxGeometry(12, 0.5, 38),
+        new THREE.MeshStandardMaterial({ color: 0x0ea5e9, roughness: 0.4, metalness: 0.3 })
+      );
+      canopy.position.set(CORRIDOR_CONFIG.SPINE_X + 15.5, 5.2, termZ);
+      canopy.castShadow = true;
+      g.add(canopy);
+      const canopyPoleMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.7, roughness: 0.35 });
+      for (const pz of [-16, 0, 16]) {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 5.2, 8), canopyPoleMat);
+        pole.position.set(CORRIDOR_CONFIG.SPINE_X + 11.2, 2.6, termZ + pz);
+        pole.castShadow = true;
+        g.add(pole);
+      }
+
+      // Parked player buses in the bays (Nitol, BRTC, Hanif), angled nose-in
+      const parkedBuses: Array<{ kind: Parameters<typeof buildTrafficVehicle>[0]; dz: number }> = [
+        { kind: 'bus_nitol', dz: -13 },
+        { kind: 'bus_brtc', dz: 1 },
+        { kind: 'bus_hanif', dz: 15 },
+      ];
+      for (const pb of parkedBuses) {
+        const bus = buildTrafficVehicle(pb.kind, textures, 0);
+        bus.group.rotation.y = -Math.PI / 2; // nose toward the road (−X)
+        bus.group.position.set(CORRIDOR_CONFIG.SPINE_X + 17.5, 0, termZ + pb.dz);
+        g.add(bus.group);
+      }
+
+      registerChunk('mohakhali_bus_terminal', termX, termZ, 70, g);
     }
 
     // Mohakhali Small Drivable Flyover (z = -1780 .. -2020, peak 4.8m)
@@ -1624,7 +1733,7 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
   const canalCutouts: [number, number][] = [
     [776, 820],   // Mid-300ft canal crossing bridge
     [1354, 1406], // Neela Market canal crossing bridge
-    [2100, 2300], // Purbachal End U-Turn Loop Plaza
+    [CORRIDOR_CONFIG.PURBACHAL_UTURN_X - 70, CORRIDOR_CONFIG.PURBACHAL_UTURN_X + 130], // Purbachal End U-Turn Loop Plaza
   ];
   const subtractCutouts = (a: number, b: number): [number, number][] => {
     let spans: [number, number][] = [[a, b]];
@@ -1644,7 +1753,7 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
   };
 
   const segLenX = 120;
-  for (let xStart = 180; xStart < 2220; xStart += segLenX) {
+  for (let xStart = 180; xStart < CORRIDOR_CONFIG.EXPRESSWAY_MAX_X - 20; xStart += segLenX) {
     const segEnd = Math.min(xStart + segLenX, CORRIDOR_CONFIG.EXPRESSWAY_MAX_X);
     const actualLen = segEnd - xStart;
     const cx = (xStart + segEnd) * 0.5;
@@ -1719,14 +1828,14 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
       bridge.position.set(1380 - cx, 0.024, 0);
       g.add(bridge);
     }
-    if (xStart >= 2100) {
-      // Sweeping Purbachal U-Turn Loop Road (eastbound bottom -> loops around x=2225 -> westbound top)
+    if (xStart >= CORRIDOR_CONFIG.PURBACHAL_UTURN_X - 70) {
+      // Sweeping Purbachal U-Turn Loop Road (eastbound bottom -> loops around the U-Turn -> westbound top)
       const uLoop = makeFlatPlane(44, 134, uturnLoopMat, -Math.PI / 2);
-      uLoop.position.set(2168 - cx, 0.024, 0);
+      uLoop.position.set(CORRIDOR_CONFIG.PURBACHAL_UTURN_X - 2 - cx, 0.024, 0);
       g.add(uLoop);
 
       const endBarrier = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.2, 44), chevronRedMat);
-      endBarrier.position.set(2238 - cx, 0.6, 0);
+      endBarrier.position.set(CORRIDOR_CONFIG.EXPRESSWAY_MAX_X - 2 - cx, 0.6, 0);
       g.add(endBarrier);
     }
 
@@ -1906,13 +2015,98 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
       g.add(duckStall);
     }
 
-    // Purbachal U-Turn Arch at x=2170
+    registerChunk('exp300_landmarks_outer', 1350, CORRIDOR_CONFIG.EXPRESSWAY_Z, 1020, g);
+  }
+
+  // Far 300ft Fuel Stations on BOTH sides along the long eastern stretch
+  // (x ~ 2500 .. 4900) so riders never run low on fuel before the Purbachal U-Turn.
+  {
+    const g = new THREE.Group();
+    // Alternating south (+Z, eastbound) & north (-Z, westbound) side pumps.
+    const farPumps: { x: number; side: -1 | 1; labelBn: string }[] = [
+      { x: 2520, side: 1, labelBn: '৩০০ ফিট পূর্বাচল পাম্প (পূর্ব ২)' },
+      { x: 3040, side: -1, labelBn: '৩০০ ফিট পূর্বাচল পাম্প (পশ্চিম ২)' },
+      { x: 3560, side: 1, labelBn: '৩০০ ফিট বাইকায়ার ফুয়েল (পূর্ব ৩)' },
+      { x: 4080, side: -1, labelBn: '৩০০ ফিট বাইকায়ার ফুয়েল (পশ্চিম ৩)' },
+      { x: 4600, side: 1, labelBn: '৩০০ ফিট শেষ প্রান্ত পাম্প (পূর্ব ৪)' },
+    ];
+    for (const fp of farPumps) {
+      const pump = buildFuelStation(textures, fp.side === 1);
+      pump.rotation.y = Math.PI / 2;
+      const pz = CORRIDOR_CONFIG.EXPRESSWAY_Z + fp.side * 22.5;
+      pump.position.set(fp.x, 0, pz);
+      g.add(pump);
+      fuelStations.push({
+        id: `exp300_far_fuel_${fp.x}`,
+        label: fp.labelBn,
+        padMinX: fp.x - GAME_CONFIG.FUEL_PAD_HALF_LENGTH,
+        padMaxX: fp.x + GAME_CONFIG.FUEL_PAD_HALF_LENGTH,
+        padMinZ: fp.side === 1 ? CORRIDOR_CONFIG.EXPRESSWAY_Z + 14.5 : CORRIDOR_CONFIG.EXPRESSWAY_Z - 23.0,
+        padMaxZ: fp.side === 1 ? CORRIDOR_CONFIG.EXPRESSWAY_Z + 23.0 : CORRIDOR_CONFIG.EXPRESSWAY_Z - 14.5,
+        nozzleX: fp.x,
+        nozzleY: 1.45,
+        nozzleZ: pz,
+      });
+    }
+    registerChunk('exp300_far_fuel', 3560, CORRIDOR_CONFIG.EXPRESSWAY_Z, 1300, g);
+  }
+
+  // Funny flyover banner arches + extra billboards along the long eastern 300ft
+  // stretch so the empty highway feels lively and fun all the way to Purbachal.
+  {
+    const g = new THREE.Group();
+    // Overhead funny banner arches spanning the full 6-lane expressway.
+    const funnyArches: { x: number; texIdx: number; accent: number }[] = [
+      { x: 2360, texIdx: 0, accent: 0xfacc15 },
+      { x: 2900, texIdx: 2, accent: 0xf472b6 },
+      { x: 3480, texIdx: 4, accent: 0x38bdf8 },
+      { x: 4020, texIdx: 1, accent: 0x7dd3fc },
+      { x: 4560, texIdx: 5, accent: 0xfbbf24 },
+      { x: 4960, texIdx: 3, accent: 0x34d399 },
+    ];
+    for (const fa of funnyArches) {
+      const arch = buildFlyoverBannerArch(
+        textures.flyoverFunnyBanners[fa.texIdx % textures.flyoverFunnyBanners.length],
+        40,
+        5.2,
+        fa.accent
+      );
+      arch.rotation.y = -Math.PI / 2;
+      arch.position.set(fa.x, 0, CORRIDOR_CONFIG.EXPRESSWAY_Z);
+      g.add(arch);
+    }
+
+    // Extra roadside billboards (alternating sides) reusing the 6 billboard designs.
+    const extraBillboards: { x: number; side: -1 | 1; texIdx: number }[] = [
+      { x: 2300, side: 1, texIdx: 4 },
+      { x: 2620, side: -1, texIdx: 5 },
+      { x: 3180, side: 1, texIdx: 0 },
+      { x: 3720, side: -1, texIdx: 2 },
+      { x: 4260, side: 1, texIdx: 3 },
+      { x: 4780, side: -1, texIdx: 1 },
+      { x: 5060, side: 1, texIdx: 5 },
+    ];
+    for (const bb of extraBillboards) {
+      const board = buildExpresswayBillboard(
+        textures.expresswayBillboards[bb.texIdx % textures.expresswayBillboards.length]
+      );
+      board.position.set(bb.x, 0, CORRIDOR_CONFIG.EXPRESSWAY_Z + bb.side * 27.5);
+      board.rotation.y = bb.side === 1 ? -Math.PI * 0.72 : -Math.PI * 0.28;
+      g.add(board);
+    }
+
+    registerChunk('exp300_far_banners_billboards', 3660, CORRIDOR_CONFIG.EXPRESSWAY_Z, 1450, g);
+  }
+
+  // Purbachal far-end U-Turn Arch (its own chunk so it stays visible at the long
+  // expressway's far end regardless of the outer-landmarks chunk culling).
+  {
+    const g = new THREE.Group();
     const purbachalU = buildUTurnSignArch(textures.uturnSigns.purbachal, 34);
     purbachalU.rotation.y = -Math.PI / 2;
     purbachalU.position.set(CORRIDOR_CONFIG.PURBACHAL_UTURN_X, 0, CORRIDOR_CONFIG.EXPRESSWAY_Z);
     g.add(purbachalU);
-
-    registerChunk('exp300_landmarks_outer', 1350, CORRIDOR_CONFIG.EXPRESSWAY_Z, 1020, g);
+    registerChunk('purbachal_uturn_arch', CORRIDOR_CONFIG.PURBACHAL_UTURN_X, CORRIDOR_CONFIG.EXPRESSWAY_Z, 120, g);
   }
 
   // Bashundhara Residential Area: a dedicated chunk centred on the township itself,
@@ -1934,6 +2128,29 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
       const duckHub = buildDuckMeatStall(textures, idx + 1);
       duckHub.position.set(dx, 0, CORRIDOR_CONFIG.EXPRESSWAY_Z - 24.5);
       g.add(duckHub);
+    }
+
+    // Extra cluster of famous Neela Market duck-meat ("হাঁসের মাংস") stalls on
+    // BOTH sides of the 300ft road so the whole market stretch feels alive.
+    const neelaDuckStalls: { dx: number; side: -1 | 1; variant: number }[] = [
+      { dx: -92, side: -1, variant: 2 },
+      { dx: -64, side: -1, variant: 0 },
+      { dx: 64, side: -1, variant: 1 },
+      { dx: 96, side: -1, variant: 2 },
+      { dx: -80, side: 1, variant: 1 },
+      { dx: -46, side: 1, variant: 2 },
+      { dx: 52, side: 1, variant: 0 },
+      { dx: 88, side: 1, variant: 1 },
+    ];
+    for (const ds of neelaDuckStalls) {
+      const stall = buildDuckMeatStall(textures, ds.variant);
+      stall.position.set(
+        CORRIDOR_CONFIG.NEELA_MARKET_X + ds.dx,
+        0,
+        CORRIDOR_CONFIG.EXPRESSWAY_Z + ds.side * 24.5
+      );
+      if (ds.side === 1) stall.rotation.y = Math.PI;
+      g.add(stall);
     }
 
     // Neela Market Hero Motors Showroom (South side at x = 1340)

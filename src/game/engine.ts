@@ -84,6 +84,7 @@ interface TrafficEntity {
   hitCooldown: number;
   lookaheadTimer: number;
   turnCooldown: number;
+  deckId: string | null; // flyover deck this vehicle is locked to (null = ground)
 }
 
 type PedMode = 'sidewalk' | 'crossing' | 'fleeing' | 'chasing' | 'knocked';
@@ -393,9 +394,9 @@ export class HeroRastarEngine {
 
   // Player Physics State (Yaw-only upright motorcycle with elevation tracking for flyovers)
   private gameState: GameState = GameState.MENU;
-  private playerX = -3.25;
+  private playerX = 133.25;
   private playerY = 0;
-  private playerZ = -18;
+  private playerZ = -1300;
   private playerYaw = 0; // 0 = -Z (North)
   private forwardSpeed = 6; // m/s along bike forward vector
   private lateralSlip = 0;
@@ -407,7 +408,7 @@ export class HeroRastarEngine {
   private postHitRecoveryTimer = 0;
   private wasBoosting = false;
   private freeNitroTimer = 0;
-  private currentCorridor: CorridorId = 'metro';
+  private currentCorridor: CorridorId = 'tejgaon';
 
   // Fuel & Hose
   private fuelAmount = 100;
@@ -939,6 +940,7 @@ export class HeroRastarEngine {
     entity.yaw = yaw;
     entity.dirX = dirX;
     entity.dirZ = dirZ;
+    entity.deckId = surf.deckId;
     entity.baseSpeed =
       (spec.minSpeed + Math.random() * (spec.maxSpeed - spec.minSpeed)) * GAME_CONFIG.TRAFFIC_SPEED_BOOST;
     entity.currentSpeed = entity.baseSpeed;
@@ -1130,6 +1132,7 @@ export class HeroRastarEngine {
         hitCooldown: 0,
         lookaheadTimer: (i % 5) * 0.04,
         turnCooldown: 0,
+        deckId: null,
       };
       this.spawnTrafficSlot(entity, kind, slot.z, slot.laneX, slot.yaw);
       this.traffic.push(entity);
@@ -1167,6 +1170,7 @@ export class HeroRastarEngine {
         hitCooldown: 0,
         lookaheadTimer: (i % 5) * 0.05,
         turnCooldown: 0,
+        deckId: null,
       };
       this.spawnTrafficSlot(entity, kind, z, x, yaw);
       entity.baseSpeed = Math.min(entity.baseSpeed, 10.5);
@@ -1461,9 +1465,9 @@ export class HeroRastarEngine {
       this.resetRunProgression();
     }
     this.gameState = GameState.PLAYING;
-    this.playerX = -3.25;
+    this.playerX = 133.25;
     this.playerY = 0;
-    this.playerZ = -18;
+    this.playerZ = -1300;
     this.playerYaw = 0;
     this.forwardSpeed = 6;
     this.lateralSlip = 0;
@@ -1475,7 +1479,7 @@ export class HeroRastarEngine {
     this.postHitRecoveryTimer = 0;
     this.wasBoosting = false;
     this.freeNitroTimer = 0;
-    this.currentCorridor = 'metro';
+    this.currentCorridor = 'tejgaon';
     this.motion.recalibrate();
 
     this.fuelAmount = this.getActiveBikeSpec().fuelCapacity;
@@ -2323,7 +2327,8 @@ export class HeroRastarEngine {
     this.resolveSolidCollisions();
 
     // 4. Sample Continuous 3D Road & Flyover Surface Elevation + Slope Pitch
-    const surface = sampleDhakaSurface(this.playerX, this.playerZ, this.playerY, fwdX, fwdZ);
+    const playerDeckLock = this.currentCorridor.startsWith('flyover_') ? this.currentCorridor : null;
+    const surface = sampleDhakaSurface(this.playerX, this.playerZ, this.playerY, fwdX, fwdZ, playerDeckLock);
     this.playerY = THREE.MathUtils.damp(this.playerY, surface.groundY, 18, dt);
     this.bikeSlopePitch = THREE.MathUtils.damp(this.bikeSlopePitch, surface.pitchRad, 14, dt);
     this.currentCorridor = surface.corridor;
@@ -2597,10 +2602,10 @@ export class HeroRastarEngine {
     if (Math.abs(x) <= 20 && z <= -1198) return true;
     // 2. Tejgaon South U-Turn Loop (z >= -1064, x ~ 140)
     if (x >= 122 && x <= 158 && z >= -1066 && z <= -1000) return true;
-    // 3. Uttara End U-Turn Loop (z <= -3640, x ~ 140)
-    if (x >= 122 && x <= 158 && z <= -3640) return true;
-    // 4. Purbachal 300ft End U-Turn Loop (x >= 2105, z ~ -2920)
-    if (x >= 2105 && z <= -2894 && z >= -2946) return true;
+    // 3. Uttara End U-Turn Loop (z <= UTTARA_UTURN_Z + 40, x ~ 140)
+    if (x >= 122 && x <= 158 && z <= CORRIDOR_CONFIG.UTTARA_UTURN_Z + 40) return true;
+    // 4. Purbachal 300ft End U-Turn Loop (x >= PURBACHAL_UTURN_X - 65, z ~ -2920)
+    if (x >= CORRIDOR_CONFIG.PURBACHAL_UTURN_X - 65 && z <= -2894 && z >= -2946) return true;
     // 5. 300ft Canal Crossing Bridges when crossing between Eastbound & Westbound
     if ((x >= 778 && x <= 818) || (x >= 1356 && x <= 1404)) {
       if (z >= -2926 && z <= -2914) return true;
@@ -2723,7 +2728,7 @@ export class HeroRastarEngine {
     const on300ftWrongWay =
       this.playerY < 1.5 &&
       this.playerX > 220 &&
-      this.playerX < 2100 &&
+      this.playerX < CORRIDOR_CONFIG.PURBACHAL_UTURN_X - 70 &&
       Math.abs(this.playerZ - CORRIDOR_CONFIG.EXPRESSWAY_Z) < 18 &&
       ((this.playerZ < CORRIDOR_CONFIG.EXPRESSWAY_Z - 4 && fwdX < -0.35) ||
         (this.playerZ > CORRIDOR_CONFIG.EXPRESSWAY_Z + 4 && fwdX > 0.35)) &&
@@ -3092,9 +3097,9 @@ export class HeroRastarEngine {
     }
 
     // 9. Uttara End U-Turn -> Swing South back toward Mohakhali
-    if (Math.abs(t.x - CORRIDOR_CONFIG.SPINE_X) < 18 && t.dirZ < -0.5 && t.z <= -3692) {
+    if (Math.abs(t.x - CORRIDOR_CONFIG.SPINE_X) < 18 && t.dirZ < -0.5 && t.z <= CORRIDOR_CONFIG.UTTARA_UTURN_Z - 12) {
       t.x = t.id % 2 === 0 ? 143.25 : 146.75;
-      t.z = -3688;
+      t.z = CORRIDOR_CONFIG.UTTARA_UTURN_Z - 8;
       t.yaw = Math.PI;
       t.dirX = 0;
       t.dirZ = 1;
@@ -3103,8 +3108,8 @@ export class HeroRastarEngine {
     }
 
     // 10. 300ft Eastbound at Purbachal U-Turn -> Loop onto 300ft Keep-Left Westbound South carriageway
-    if (t.dirX > 0.5 && t.x >= 2168) {
-      t.x = 2164;
+    if (t.dirX > 0.5 && t.x >= CORRIDOR_CONFIG.PURBACHAL_UTURN_X - 2) {
+      t.x = CORRIDOR_CONFIG.PURBACHAL_UTURN_X - 6;
       t.z =
         t.routeTag === 'KURIL_RAMP_TO_300FT'
           ? -2909.5
@@ -3205,8 +3210,9 @@ export class HeroRastarEngine {
         }
       }
 
-      const surf = sampleDhakaSurface(t.x, t.z, t.y, t.dirX, t.dirZ);
+      const surf = sampleDhakaSurface(t.x, t.z, t.y, t.dirX, t.dirZ, t.deckId);
       t.y = surf.groundY;
+      t.deckId = surf.deckId;
       t.rig.group.position.set(t.x, t.y, t.z);
       t.rig.group.rotation.x = surf.pitchRad;
       t.rig.group.rotation.z = 0;
@@ -3623,10 +3629,17 @@ export class HeroRastarEngine {
     const bikeHalfW = 0.32;
     const bikeHalfL = 0.65;
     const bikeSpec = this.getActiveBikeSpec();
+    // Player's current flyover deck (null when on the ground). A flyover id in
+    // currentCorridor means the player is riding that elevated deck.
+    const playerDeck = this.currentCorridor.startsWith('flyover_') ? this.currentCorridor : null;
 
     for (const t of this.traffic) {
       if (t.wrecked || t.hitCooldown > 0 || !t.rig.group.visible) continue;
       if (Math.abs(this.playerY - t.y) > 1.85) continue;
+      // Same-deck guard (defense in depth): never collide with traffic that is on
+      // a different flyover deck than the player, even if their heights briefly
+      // align near a ramp. Ground vs ground (both null) and same-deck still collide.
+      if (playerDeck !== t.deckId) continue;
 
       const spec = VEHICLE_SPECS[t.kind];
       const scale = 0.58;
@@ -4008,7 +4021,7 @@ export class HeroRastarEngine {
         return 'তেজগাঁও লিংক রোড';
       case 'expressway300ft':
         if (this.playerX >= 330 && this.playerX <= 650) return '৩০০ ফিট • বসুন্ধরা আবাসিক এলাকা';
-        if (this.playerX > 2050) return '৩০০ ফিট • পূর্বাচল ইউ-টার্ন';
+        if (this.playerX > CORRIDOR_CONFIG.PURBACHAL_UTURN_X - 120) return '৩০০ ফিট • পূর্বাচল ইউ-টার্ন';
         if (Math.abs(this.playerX - CORRIDOR_CONFIG.NEELA_MARKET_X) < 130) return '৩০০ ফিট • নীলা মার্কেট';
         return '৩০০ ফিট • পূর্বাচল এক্সপ্রেসওয়ে';
       case 'tejgaon':
