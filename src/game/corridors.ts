@@ -1670,6 +1670,65 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
       slipArrow.position.set(151.5, 0.022, -2718);
       g.add(slipArrow);
 
+      // --- Slip-plaza beautification (visual only, outside the drivable rect) ---
+      const edgeLineMat = new THREE.MeshBasicMaterial({ color: 0xf8fafc });
+      const guideArrowMat = new THREE.MeshBasicMaterial({ map: textures.flyoverSlipArrow });
+
+      // Crisp white edge lines framing both sides of the slip approach (flat, no collision).
+      for (const ex of [131.0, 173.6]) {
+        const edge = makeFlatPlane(0.5, 78, edgeLineMat);
+        edge.position.set(ex, 0.02, -2725);
+        g.add(edge);
+      }
+      // Dashed center guide line up the slip approach toward the ramp.
+      for (let gz = -2688; gz >= -2760; gz -= 12) {
+        const dash = makeFlatPlane(0.4, 6, edgeLineMat);
+        dash.position.set(152.3, 0.02, gz);
+        g.add(dash);
+      }
+      // Extra painted guidance arrows steering the rider right onto the ramp.
+      for (const az of [-2700, -2740, -2778]) {
+        const arrow = makeFlatPlane(7.2, 7.2, guideArrowMat);
+        arrow.position.set(157.5, 0.022, az);
+        g.add(arrow);
+      }
+
+      // Landscaped palms + glowing lamps along the outer (non-drivable) corners so the
+      // junction feels like a proper Dhaka flyover approach, not a bare asphalt patch.
+      for (const [px, pz, s] of [
+        [126.5, -2688, 1.0],
+        [126.5, -2762, 1.05],
+        [178.5, -2688, 1.0],
+        [178.5, -2762, 1.05],
+      ] as [number, number, number][]) {
+        const palm = makePalm(s);
+        palm.position.set(px, 0.05, pz);
+        g.add(palm);
+      }
+      for (const [lx, lz] of [
+        [128.5, -2706],
+        [128.5, -2744],
+        [176.0, -2706],
+        [176.0, -2744],
+      ] as [number, number][]) {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 6.4, 7), lampPoleMat);
+        pole.position.set(lx, 3.2, lz);
+        pole.castShadow = true;
+        g.add(pole);
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 3.6), lampPoleMat);
+        arm.position.set(lx, 6.3, lz + (lz < -2725 ? 1.6 : -1.6));
+        g.add(arm);
+        const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.14, 0.7), bulbMat);
+        bulb.position.set(lx, 6.2, lz + (lz < -2725 ? 3.2 : -3.2));
+        g.add(bulb);
+      }
+
+      // Overhead direction gantry at the slip-plaza entrance (faces the oncoming rider
+      // from the spine) announcing the 300ft flyover climb.
+      const slipGantry = buildHighwayDirectionGantry(textures.corridorGantries.expressway300ft);
+      slipGantry.position.set(152.3, 0, -2690);
+      g.add(slipGantry);
+
       // High-resolution Upper Eastbound Skyway (10.6m peak, x=155.0, z=-2735 -> Arc R=85.5 -> z=-2930.5, x=425.5)
       const ebPoints: { x: number; y: number; z: number }[] = [];
       for (let i = 0; i <= 20; i++) {
