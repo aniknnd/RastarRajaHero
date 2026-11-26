@@ -2078,16 +2078,27 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
   }
 
   // Far 300ft Fuel Stations on BOTH sides along the long eastern stretch
-  // (x ~ 2500 .. 4900) so riders never run low on fuel before the Purbachal U-Turn.
+  // (x ~ 2200 .. 5100) so riders never run low on fuel before the Purbachal U-Turn.
   {
     const g = new THREE.Group();
-    // Alternating south (+Z, eastbound) & north (-Z, westbound) side pumps.
+    // Dense alternating south (+Z, eastbound) & north (-Z, westbound) side pumps —
+    // plenty of fuel stations on BOTH sides across the whole Purbachal highway.
     const farPumps: { x: number; side: -1 | 1; labelBn: string }[] = [
-      { x: 2520, side: 1, labelBn: '৩০০ ফিট পূর্বাচল পাম্প (পূর্ব ২)' },
-      { x: 3040, side: -1, labelBn: '৩০০ ফিট পূর্বাচল পাম্প (পশ্চিম ২)' },
-      { x: 3560, side: 1, labelBn: '৩০০ ফিট বাইকায়ার ফুয়েল (পূর্ব ৩)' },
-      { x: 4080, side: -1, labelBn: '৩০০ ফিট বাইকায়ার ফুয়েল (পশ্চিম ৩)' },
-      { x: 4600, side: 1, labelBn: '৩০০ ফিট শেষ প্রান্ত পাম্প (পূর্ব ৪)' },
+      { x: 2240, side: 1, labelBn: '৩০০ ফিট পূর্বাচল পাম্প (পূর্ব ২)' },
+      { x: 2420, side: -1, labelBn: '৩০০ ফিট পূর্বাচল পাম্প (পশ্চিম ২)' },
+      { x: 2620, side: 1, labelBn: '৩০০ ফিট বাইকায়ার ফুয়েল (পূর্ব ৩)' },
+      { x: 2820, side: -1, labelBn: '৩০০ ফিট বাইকায়ার ফুয়েল (পশ্চিম ৩)' },
+      { x: 3020, side: 1, labelBn: '৩০০ ফিট পূর্বাচল পাম্প (পূর্ব ৪)' },
+      { x: 3220, side: -1, labelBn: '৩০০ ফিট পূর্বাচল পাম্প (পশ্চিম ৪)' },
+      { x: 3420, side: 1, labelBn: '৩০০ ফিট বাইকায়ার ফুয়েল (পূর্ব ৫)' },
+      { x: 3620, side: -1, labelBn: '৩০০ ফিট বাইকায়ার ফুয়েল (পশ্চিম ৫)' },
+      { x: 3820, side: 1, labelBn: '৩০০ ফিট পূর্বাচল পাম্প (পূর্ব ৬)' },
+      { x: 4020, side: -1, labelBn: '৩০০ ফিট পূর্বাচল পাম্প (পশ্চিম ৬)' },
+      { x: 4220, side: 1, labelBn: '৩০০ ফিট বাইকায়ার ফুয়েল (পূর্ব ৭)' },
+      { x: 4420, side: -1, labelBn: '৩০০ ফিট বাইকায়ার ফুয়েল (পশ্চিম ৭)' },
+      { x: 4620, side: 1, labelBn: '৩০০ ফিট শেষ প্রান্ত পাম্প (পূর্ব ৮)' },
+      { x: 4820, side: -1, labelBn: '৩০০ ফিট শেষ প্রান্ত পাম্প (পশ্চিম ৮)' },
+      { x: 5020, side: 1, labelBn: '৩০০ ফিট শেষ প্রান্ত পাম্প (পূর্ব ৯)' },
     ];
     for (const fp of farPumps) {
       const pump = buildFuelStation(textures, fp.side === 1);
@@ -2107,7 +2118,7 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
         nozzleZ: pz,
       });
     }
-    registerChunk('exp300_far_fuel', 3560, CORRIDOR_CONFIG.EXPRESSWAY_Z, 1300, g);
+    registerChunk('exp300_far_fuel', 3630, CORRIDOR_CONFIG.EXPRESSWAY_Z, 1600, g);
   }
 
   // Funny flyover banner arches + extra billboards along the long eastern 300ft
