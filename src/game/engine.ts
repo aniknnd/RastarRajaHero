@@ -163,6 +163,7 @@ const MISSION_TEMPLATES: readonly MissionTemplate[] = [
 // Pre-allocated math helpers (Zero GC in render loop)
 const _camTarget = new THREE.Vector3();
 const _lookTarget = new THREE.Vector3();
+const _smoothLookTarget = new THREE.Vector3();
 const _exhaustWorldPos = new THREE.Vector3();
 const _fuelPortWorldPos = new THREE.Vector3();
 const _hoseStart = new THREE.Vector3();
@@ -475,6 +476,7 @@ export class HeroRastarEngine {
   private slapTriggered = false;
   private hitstopTimer = 0;
   private cameraShake = 0;
+  private camLookInitialized = false;
 
   private elapsedSec = 0;
   private exhaustAccumulator = 0;
@@ -1472,6 +1474,7 @@ export class HeroRastarEngine {
     this.forwardSpeed = 6;
     this.lateralSlip = 0;
     this.smoothedSteer = 0;
+    this.camLookInitialized = false;
     this.bikeLean = 0;
     this.bikePitch = 0;
     this.bikeSlopePitch = 0;
@@ -2225,14 +2228,14 @@ export class HeroRastarEngine {
     const speedNormPre = THREE.MathUtils.clamp(Math.abs(this.forwardSpeed) / bikeSpec.maxBoostMps, 0, 1);
     const motionSteer = this.motion.getSteer(dt, speedNormPre);
     const rawSteer = keySteer !== 0 ? keySteer : motionSteer;
-    // Responsive ramp-in so taps build up smoothly (no instant snap), while releasing
-    // the stick still re-centers quickly so you never fight a lingering lean.
-    const steerRate = rawSteer !== 0 ? 6.2 : 14.0;
+    // Smooth ramp-in so button taps build up gently (no snappy jolt), while releasing
+    // the button still re-centers reasonably fast so you never fight a lingering lean.
+    const steerRate = rawSteer !== 0 ? 4.6 : 12.0;
     this.smoothedSteer = THREE.MathUtils.damp(this.smoothedSteer, rawSteer, steerRate, dt);
-    // Gentle expo (v^1.2): small inputs stay a touch softer for fine control, but the
-    // mid-range stays fully usable (unlike smoothstep, which compressed it to near-zero).
+    // Gentle expo (v^1.1): keeps the mid-range usable while softening the initial
+    // bite of a button press so steering feels smooth rather than twitchy.
     const sAbs = Math.abs(this.smoothedSteer);
-    const effectiveSteer = Math.sign(this.smoothedSteer) * Math.pow(sAbs, 1.2);
+    const effectiveSteer = Math.sign(this.smoothedSteer) * Math.pow(sAbs, 1.1);
 
     // 2b. Automatic U-Turn Speed Reduction & Cornering Assist
     const inUTurnPlaza = this.isInUTurnZone(this.playerX, this.playerZ);
@@ -2492,8 +2495,8 @@ export class HeroRastarEngine {
     this.updateViolations(dt, speedKmh, fwdX, fwdZ);
 
     // 7. Hero Bike Kinematics & Exhaust Smoke
-    const targetLean = effectiveSteer * 0.3 * THREE.MathUtils.clamp(absSpeed / 10, 0.2, 1.0);
-    this.bikeLean = THREE.MathUtils.damp(this.bikeLean, targetLean, 7, dt);
+    const targetLean = effectiveSteer * 0.26 * THREE.MathUtils.clamp(absSpeed / 10, 0.2, 1.0);
+    this.bikeLean = THREE.MathUtils.damp(this.bikeLean, targetLean, 6, dt);
     const targetPitch = this.input.handbrake || brakingWithTouchBrake ? -0.09 : isBoosting ? 0.08 : 0;
     this.bikePitch = THREE.MathUtils.damp(this.bikePitch, targetPitch, 8, dt);
 
@@ -3210,6 +3213,12 @@ export class HeroRastarEngine {
         }
       }
 
+      // Flyover behaviour (correct lanes, no wrong-way): the divided flyover deck
+      // carries the INNER lane of each direction (northbound x=136.75 on the west
+      // half, southbound x=143.25 on the east half) — they ride up and over. The
+      // OUTER lanes (northbound x=133.25, southbound x=146.75) stay on the ground
+      // on their own correct side. No forced cross-over merge, so nobody drives the
+      // wrong way. The height-lock mounts inner cars at the ramp foot automatically.
       const surf = sampleDhakaSurface(t.x, t.z, t.y, t.dirX, t.dirZ, t.deckId);
       t.y = surf.groundY;
       t.deckId = surf.deckId;
@@ -3434,9 +3443,9 @@ export class HeroRastarEngine {
           return;
         }
 
-        const laneIdx = pickArteryLaneForKind(chosenKind);
-        const laneX = CORRIDOR_CONFIG.SPINE_LANES[laneIdx];
-        const yaw = laneX > CORRIDOR_CONFIG.SPINE_X ? Math.PI : 0;
+        let laneIdx = pickArteryLaneForKind(chosenKind);
+        let laneX = CORRIDOR_CONFIG.SPINE_LANES[laneIdx];
+        let yaw = laneX > CORRIDOR_CONFIG.SPINE_X ? Math.PI : 0;
         const aheadSign = fwdZ <= 0 ? -1 : 1;
         let newZ = THREE.MathUtils.clamp(
           this.playerZ + aheadSign * (100 + Math.random() * 110),
@@ -3446,6 +3455,20 @@ export class HeroRastarEngine {
         // Never spawn non-ramp vehicles inside the Kuril slip merge zone on East lanes
         if (t.routeTag === 'KURIL_RAMP_TO_300FT' && newZ < -2740 && yaw === 0) {
           newZ = -2660;
+        }
+        // Keep ground traffic OUT from under the Mohakhali & Banani flyover decks.
+        // The flyover deck spans the inner lanes (x≈135..145); a ground car spawned
+        // there would drive under/through the low ramp. Route those spawns to the
+        // OUTER lanes (x=133.25 / 146.75) which run BESIDE the flyover, not under it.
+        const inMohaFlyover = newZ <= CORRIDOR_CONFIG.MOHAKHALI_FLYOVER_START_Z + 20 &&
+          newZ >= CORRIDOR_CONFIG.MOHAKHALI_FLYOVER_END_Z - 20;
+        const inBananiFlyover = newZ <= CORRIDOR_CONFIG.BANANI_FLYOVER_START_Z + 20 &&
+          newZ >= CORRIDOR_CONFIG.BANANI_FLYOVER_END_Z - 20;
+        if (inMohaFlyover || inBananiFlyover) {
+          // Preserve travel direction but move to the outer lane on that side.
+          laneIdx = laneX > CORRIDOR_CONFIG.SPINE_X ? 3 : 0;
+          laneX = CORRIDOR_CONFIG.SPINE_LANES[laneIdx];
+          yaw = laneX > CORRIDOR_CONFIG.SPINE_X ? Math.PI : 0;
         }
         for (const other of this.traffic) {
           if (other.id !== t.id && !other.isCityVehicle && Math.abs(other.x - laneX) < 1.5 && Math.abs(other.z - newZ) < 14) {
@@ -4006,7 +4029,18 @@ export class HeroRastarEngine {
       this.playerY + 1.0,
       this.playerZ + fwdZ * (10 + speedNorm * 6)
     );
-    this.camera.lookAt(_lookTarget);
+    // Smooth the camera aim so quick left/right button taps don't whip the view
+    // side-to-side ("shake"). The position already damps; damping the look target
+    // too keeps the horizon steady while still following the bike's heading.
+    if (!this.camLookInitialized) {
+      _smoothLookTarget.copy(_lookTarget);
+      this.camLookInitialized = true;
+    } else {
+      _smoothLookTarget.x = THREE.MathUtils.damp(_smoothLookTarget.x, _lookTarget.x, 9, dt);
+      _smoothLookTarget.y = THREE.MathUtils.damp(_smoothLookTarget.y, _lookTarget.y, 9, dt);
+      _smoothLookTarget.z = THREE.MathUtils.damp(_smoothLookTarget.z, _lookTarget.z, 9, dt);
+    }
+    this.camera.lookAt(_smoothLookTarget);
   }
 
   private getDhakaZoneLabel(): string {

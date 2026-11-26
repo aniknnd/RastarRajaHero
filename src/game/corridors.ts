@@ -388,6 +388,24 @@ const GROUND_DRIVABLE_RECTS: readonly DrivableRect[] = [
   { minX: CORRIDOR_CONFIG.PURBACHAL_UTURN_X - 65, maxX: CORRIDOR_CONFIG.EXPRESSWAY_MAX_X - 4, minZ: -2942, maxZ: -2898 },
 ];
 
+// Extra fuel stations along the Mohakhali -> Uttara spine (both sides), avoiding
+// the Mohakhali/Banani flyover decks, the Kuril interchange and the bus terminal.
+// Shared by the pump placement and the roadside-building skip so nothing overlaps.
+const SPINE_EXTRA_FUEL: readonly { z: number; side: -1 | 1 }[] = [
+  { z: -2050, side: 1 },
+  { z: -2850, side: 1 },
+  { z: -3050, side: -1 },
+  { z: -3350, side: 1 },
+  { z: -3650, side: -1 },
+  { z: -3950, side: 1 },
+  { z: -4250, side: -1 },
+  { z: -4650, side: 1 },
+  { z: -5050, side: -1 },
+  { z: -5550, side: 1 },
+  { z: -6050, side: -1 },
+  { z: -6400, side: 1 },
+];
+
 export function clampToDrivableCorridors(
   x: number,
   z: number,
@@ -1335,6 +1353,10 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
     const g = new THREE.Group();
     g.position.set(CORRIDOR_CONFIG.SPINE_X, 0, baseZ);
 
+    // Ground road stays centered. The flyover deck (centered) carries the INNER lane
+    // of each direction (cars ride up and over); the OUTER lanes stay on the ground on
+    // their own correct side. This keeps every lane on the road and avoids wrong-way
+    // driving that a cross-over merge would cause.
     const road = makeFlatPlane(CORRIDOR_CONFIG.SPINE_HALF_WIDTH * 2, spineBlockLen, roadMat);
     g.add(road);
 
@@ -1384,6 +1406,8 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
         if (side === 1 && worldZ <= -2670 && worldZ >= -2980) continue;
         // Reserve the east side around the Mohakhali Bus Terminal for the terminal scene
         if (side === 1 && Math.abs(worldZ - CORRIDOR_CONFIG.MOHAKHALI_BUS_TERMINAL_Z) < 52) continue;
+        // Reserve both sides around the extra Mohakhali->Uttara fuel stations.
+        if (SPINE_EXTRA_FUEL.some((f) => Math.abs(worldZ - f.z) < 24)) continue;
         if (
           side === -1 &&
           (Math.abs(worldZ - CORRIDOR_CONFIG.TEJGAON_SHOWROOM_Z) < 24 ||
@@ -1485,6 +1509,32 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
     addSpineFuel('banani_pump', 'বনানী হিরো তেল পাম্প', CORRIDOR_CONFIG.BANANI_PUMP_Z);
     addSpineFuel('uttara_pump', 'উত্তরা হিরো তেল পাম্প', CORRIDOR_CONFIG.UTTARA_PUMP_Z);
     addSpineShowroom('uttara_showroom', 'উত্তরা নিলয় হিরো শোরুম', CORRIDOR_CONFIG.UTTARA_SHOWROOM_Z);
+
+    // Extra fuel stations along the Mohakhali -> Uttara spine on BOTH sides.
+    {
+      const g = new THREE.Group();
+      const eastX = CORRIDOR_CONFIG.SPINE_X + 10.8;
+      const westX = CORRIDOR_CONFIG.SPINE_X - 10.8;
+      for (const [idx, fp] of SPINE_EXTRA_FUEL.entries()) {
+        const stX = fp.side === 1 ? eastX : westX;
+        const station = buildFuelStation(textures, fp.side === 1);
+        station.position.set(stX, 0, fp.z);
+        g.add(station);
+        fuelStations.push({
+          id: `spine_extra_fuel_${idx}`,
+          label: `মহাখালী-উত্তরা হিরো তেল পাম্প (${fp.side === 1 ? 'পূর্ব' : 'পশ্চিম'} ${idx + 1})`,
+          padMinX: stX - 3.2,
+          padMaxX: stX + 3.2,
+          padMinZ: fp.z - GAME_CONFIG.FUEL_PAD_HALF_LENGTH,
+          padMaxZ: fp.z + GAME_CONFIG.FUEL_PAD_HALF_LENGTH,
+          nozzleX: stX,
+          nozzleY: 1.45,
+          nozzleZ: fp.z,
+        });
+      }
+      // One chunk spanning the whole spine fuel stretch so culling stays simple.
+      registerChunk('spine_extra_fuel', CORRIDOR_CONFIG.SPINE_X, -4200, 2400, g);
+    }
 
     // Pedestrian Foot-Overbridges (normal Dhaka overbridges at Tejgaon, Mohakhali, Banani, Uttara)
     for (const fob of [
@@ -1628,9 +1678,16 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
         'sky',
         textures.flyoverFunnyBanners[0]
       );
-      const underCross = makeFlatPlane(54, 14, plainAsphaltMat);
-      underCross.position.set(CORRIDOR_CONFIG.SPINE_X, 0.014, -1900);
-      g.add(underCross);
+      // Widened ground apron where the flyover begins: the road opens up and the
+      // straight ground route spreads to the sides (no perpendicular road under the
+      // elevated deck — that read as "road under the flyover").
+      const startApron = makeFlatPlane(36, 30, plainAsphaltMat);
+      startApron.position.set(CORRIDOR_CONFIG.SPINE_X, 0.014, CORRIDOR_CONFIG.MOHAKHALI_FLYOVER_START_Z + 6);
+      g.add(startApron);
+      // End apron: the shifted ground road merges back to the centered road here.
+      const endApron = makeFlatPlane(36, 30, plainAsphaltMat);
+      endApron.position.set(CORRIDOR_CONFIG.SPINE_X, 0.014, CORRIDOR_CONFIG.MOHAKHALI_FLYOVER_END_Z - 6);
+      g.add(endApron);
       registerChunk('mohakhali_flyover', CORRIDOR_CONFIG.SPINE_X, -1900, 180, g);
     }
 
@@ -1649,9 +1706,13 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
         'gold',
         textures.flyoverFunnyBanners[2]
       );
-      const underCross = makeFlatPlane(54, 14, plainAsphaltMat);
-      underCross.position.set(CORRIDOR_CONFIG.SPINE_X, 0.014, -2550);
-      g.add(underCross);
+      const startApron = makeFlatPlane(36, 30, plainAsphaltMat);
+      startApron.position.set(CORRIDOR_CONFIG.SPINE_X, 0.014, CORRIDOR_CONFIG.BANANI_FLYOVER_START_Z + 6);
+      g.add(startApron);
+      // End apron: the shifted ground road merges back to the centered road here.
+      const endApron = makeFlatPlane(36, 30, plainAsphaltMat);
+      endApron.position.set(CORRIDOR_CONFIG.SPINE_X, 0.014, CORRIDOR_CONFIG.BANANI_FLYOVER_END_Z - 6);
+      g.add(endApron);
       registerChunk('banani_flyover', CORRIDOR_CONFIG.SPINE_X, -2550, 190, g);
     }
 
@@ -2294,6 +2355,36 @@ export function buildExpandedDhakaCorridors(textures: ProceduralTextureSet): Exp
       bonusAwardedThisPass: false,
     });
     registerChunk(`spine_sig_${iz}`, CORRIDOR_CONFIG.SPINE_X, iz, 50, g);
+  }
+
+  // Signalized intersection BEFORE the 300ft flyover ramp (Kuril slip approach,
+  // z = -2700). Northbound spine traffic — including KURIL_RAMP_TO_300FT cars that
+  // climb the ramp — must stop at the red light and proceed on green. The existing
+  // stop-line + 16s phase cycle handles every intersection automatically, so this
+  // one behaves exactly like the Tejgaon/Banani signals. Elevated ramp cars (y>1.2)
+    // are already past it and are unaffected.
+  {
+    const g = new THREE.Group();
+    const rampSigSouth = buildTrafficLight();
+    rampSigSouth.group.position.set(CORRIDOR_CONFIG.SPINE_X - 10.5, 0, -2700 + 8);
+    g.add(rampSigSouth.group);
+    const rampSigNorth = buildTrafficLight();
+    rampSigNorth.group.position.set(CORRIDOR_CONFIG.SPINE_X + 10.5, 0, -2700 - 8);
+    rampSigNorth.group.rotation.y = Math.PI;
+    g.add(rampSigNorth.group);
+
+    intersections.push({
+      baseX: CORRIDOR_CONFIG.SPINE_X,
+      baseZ: -2700,
+      nsLightRigs: [rampSigSouth, rampSigNorth],
+      ewLightRigs: [],
+      nsPhase: 'GREEN',
+      ewPhase: 'RED',
+      cycleOffset: 1.5,
+      violatedThisPass: false,
+      bonusAwardedThisPass: false,
+    });
+    registerChunk('spine_sig_300ft_ramp', CORRIDOR_CONFIG.SPINE_X, -2700, 50, g);
   }
 
   return {
